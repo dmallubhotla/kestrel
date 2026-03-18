@@ -1,11 +1,16 @@
 {
-  description = "deepak file for example-service";
+  description = "kestrel (kest) CLI dev environment";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    gomod2nix = {
+      url = "github:nix-community/gomod2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs =
     {
       nixpkgs,
+      gomod2nix,
       ...
     }:
     let
@@ -16,18 +21,30 @@
         "x86_64-linux"
       ];
       eachSystem = f: nixpkgs.lib.genAttrs supportedSystems (system: f (pkgsFor system));
-      pkgsFor = 
+      pkgsFor =
         system:
-        let pkgs = import nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
-        };
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
         in
         pkgs.extend (
-          nixpkgs.lib.composeManyExtensions []
+          nixpkgs.lib.composeManyExtensions [
+            gomod2nix.overlays.default
+          ]
         );
     in
     {
+
+      packages = eachSystem (pkgs: {
+        default = pkgs.buildGoApplication {
+          pname = "kest";
+          version = "0.1.0";
+          src = ./.;
+          modules = ./gomod2nix.toml;
+        };
+      });
 
       devShells = eachSystem (pkgs: {
         default = pkgs.mkShell {
@@ -40,10 +57,10 @@
             golangci-lint
             go-tools
             gopls
+            gomod2nix.packages.${system}.default
           ];
           shellHook = ''
-            echo "In example-service wrapper devshell"
-            unset DEVELOPER_DIR
+            echo "kestrel devshell"
           '';
         };
       });
