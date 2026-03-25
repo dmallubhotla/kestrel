@@ -6,13 +6,18 @@
       url = "github:nix-community/gomod2nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs =
     {
+      self,
       nixpkgs,
       gomod2nix,
       ...
-    }:
+    }@inputs:
     let
       supportedSystems = [
         "aarch64-darwin"
@@ -35,6 +40,7 @@
             kestOverlay
           ]
         );
+      treefmtEval = eachSystem (pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
       kestOverlay = final: prev: {
         kest = final.buildGoApplication {
           pname = "kest";
@@ -56,6 +62,11 @@
 
       packages = eachSystem (pkgs: {
         default = pkgs.kest;
+      });
+
+      formatter = eachSystem (pkgs: treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.wrapper);
+      cheks = eachSystem (pkgs: {
+        formatting = treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.check self;
       });
 
       devShells = eachSystem (pkgs: {

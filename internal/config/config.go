@@ -166,13 +166,46 @@ func merge(global, project *Config) *Config {
 	return &out
 }
 
+const maxBackups = 3
+
+// rotateBackups shifts existing .bak files up and copies the current file
+// to .bak. Files beyond maxBackups are removed.
+func rotateBackups(path string) {
+	if _, err := os.Stat(path); err != nil {
+		return // nothing to back up
+	}
+
+	// Remove oldest if it exists.
+	oldest := fmt.Sprintf("%s.bak.%d", path, maxBackups)
+	os.Remove(oldest)
+
+	// Shift .bak.N → .bak.N+1
+	for i := maxBackups - 1; i >= 1; i-- {
+		src := fmt.Sprintf("%s.bak.%d", path, i)
+		dst := fmt.Sprintf("%s.bak.%d", path, i+1)
+		os.Rename(src, dst)
+	}
+
+	// .bak → .bak.1
+	os.Rename(path+".bak", path+".bak.1")
+
+	// current → .bak
+	data, err := os.ReadFile(path)
+	if err == nil {
+		os.WriteFile(path+".bak", data, 0o644)
+	}
+}
+
 // WriteGlobal writes the given config to the global config path,
-// creating parent directories as needed.
+// creating parent directories as needed. The previous file is rotated
+// into .bak, .bak.1, .bak.2, etc.
 func WriteGlobal(cfg *Config) error {
 	path := GlobalConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
+
+	rotateBackups(path)
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
