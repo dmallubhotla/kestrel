@@ -5,13 +5,23 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/adrg/xdg"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Helm         HelmConfig              `yaml:"helm"`
-	Terraform    TerraformConfig         `yaml:"terraform"`
-	Environments map[string]EnvConfig    `yaml:"environments"`
+	Helm         HelmConfig           `yaml:"helm"`
+	Terraform    TerraformConfig      `yaml:"terraform"`
+	Environments map[string]EnvConfig `yaml:"environments"`
+
+	// Sources tracks which config files were loaded (not serialised).
+	Sources Sources `yaml:"-"`
+}
+
+// Sources records the file paths that contributed to the loaded config.
+type Sources struct {
+	Global  string // XDG config path (may be empty if not found)
+	Project string // project-level .kestconfig (may be empty if not found)
 }
 
 type HelmConfig struct {
@@ -31,22 +41,42 @@ type EnvConfig struct {
 	AwsProfile  string `yaml:"aws_profile"`
 }
 
-const configFileName = ".kestconfig"
+const (
+	appName        = "kest"
+	configFileName = ".kestconfig"
+	globalFileName = "config.yaml"
+)
 
-// Load reads the global ~/.kestconfig and the project-level .kestconfig,
+// GlobalConfigPath returns the expected path for the global config file:
+// $XDG_CONFIG_HOME/kest/config.yaml (typically ~/.config/kest/config.yaml).
+func GlobalConfigPath() string {
+	return filepath.Join(xdg.ConfigHome, appName, globalFileName)
+}
+
+// Load reads the global XDG config and the project-level .kestconfig,
 // merging them with project-level values taking precedence.
 func Load() (*Config, error) {
-	global, err := loadGlobal()
+	globalPath := GlobalConfigPath()
+	global, err := loadFile(globalPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading global config: %w", err)
 	}
 
-	project, err := loadProject()
+	projectPath, _ := findProjectConfig()
+	project, err := loadFile(projectPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading project config: %w", err)
 	}
 
 	merged := merge(global, project)
+
+	// Record which files actually existed.
+	if fileExists(globalPath) {
+		merged.Sources.Global = globalPath
+	}
+	if projectPath != "" && fileExists(projectPath) {
+		merged.Sources.Project = projectPath
+	}
 
 	// Apply defaults
 	if merged.Helm.Namespace == "" {
@@ -56,23 +86,6 @@ func Load() (*Config, error) {
 	return merged, nil
 }
 
-func loadGlobal() (*Config, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return &Config{}, nil
-	}
-	return loadFile(filepath.Join(home, configFileName))
-}
-
-func loadProject() (*Config, error) {
-	path, err := findProjectConfig()
-	if err != nil {
-		return &Config{}, nil
-	}
-	return loadFile(path)
-}
-
-// findProjectConfig walks up from the current directory looking for .kestconfig.
 func findProjectConfig() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -93,6 +106,9 @@ func findProjectConfig() (string, error) {
 }
 
 func loadFile(path string) (*Config, error) {
+	if path == "" {
+		return &Config{}, nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -106,6 +122,11 @@ func loadFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return &cfg, nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // merge combines global and project configs. Project values override global.
