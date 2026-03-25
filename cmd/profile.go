@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -64,10 +65,41 @@ var profileSetCmd = &cobra.Command{
 	},
 }
 
+// safeShellValue matches strings that are safe to use unquoted in shell.
+// Only alphanumerics, hyphens, underscores, dots, colons, and slashes.
+var safeShellValue = regexp.MustCompile(`^[a-zA-Z0-9._:/@-]+$`)
+
+// shellQuote returns the value single-quoted for safe shell interpolation,
+// or as-is if it contains only safe characters.
+func shellQuote(s string) string {
+	if safeShellValue.MatchString(s) {
+		return s
+	}
+	// Single-quote the value, escaping any embedded single quotes.
+	// In shell: 'it'\''s' → it's
+	quoted := "'"
+	for _, c := range s {
+		if c == '\'' {
+			quoted += `'\''`
+		} else {
+			quoted += string(c)
+		}
+	}
+	quoted += "'"
+	return quoted
+}
+
 var profileExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Print shell commands to configure the active profile (use with eval)",
-	Long:  "Outputs export and kubectl commands for the active profile.\nUsage: eval $(kest profile export)",
+	Long: `Outputs export and kubectl commands for the active profile.
+
+Usage:
+  eval "$(kest profile export)"
+
+Add to your shell rc for automatic activation:
+  # ~/.bashrc or ~/.zshrc
+  eval "$(kest profile export)"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := profile.Read()
 		if err != nil {
@@ -83,10 +115,10 @@ var profileExportCmd = &cobra.Command{
 		}
 
 		if envCfg.AwsProfile != "" {
-			fmt.Printf("export AWS_PROFILE=%s\n", envCfg.AwsProfile)
+			fmt.Printf("export AWS_PROFILE=%s\n", shellQuote(envCfg.AwsProfile))
 		}
 		if envCfg.KubeContext != "" {
-			fmt.Printf("kubectl config use-context %s\n", envCfg.KubeContext)
+			fmt.Printf("kubectl config use-context %s\n", shellQuote(envCfg.KubeContext))
 		}
 		return nil
 	},
