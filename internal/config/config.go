@@ -166,6 +166,30 @@ func merge(global, project *Config) *Config {
 	return &out
 }
 
+// WriteGlobal writes the given config to the global config path,
+// creating parent directories as needed.
+func WriteGlobal(cfg *Config) error {
+	path := GlobalConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshalling config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// LoadGlobal reads only the global config file (no project merge).
+func LoadGlobal() (*Config, error) {
+	return loadFile(GlobalConfigPath())
+}
+
 // ResolveEnv returns the environment config for the given name, or an error.
 func (c *Config) ResolveEnv(name string) (EnvConfig, error) {
 	env, ok := c.Environments[name]
