@@ -32,18 +32,27 @@
         pkgs.extend (
           nixpkgs.lib.composeManyExtensions [
             gomod2nix.overlays.default
+            kestOverlay
           ]
         );
-    in
-    {
-
-      packages = eachSystem (pkgs: {
-        default = pkgs.buildGoApplication {
+      kestOverlay = final: prev: {
+        kest = final.buildGoApplication {
           pname = "kest";
           version = "0.1.0";
           src = ./.;
           modules = ./gomod2nix.toml;
         };
+      };
+    in
+    {
+
+      overlays.default = nixpkgs.lib.composeManyExtensions [
+        gomod2nix.overlays.default
+        kestOverlay
+      ];
+
+      packages = eachSystem (pkgs: {
+        default = pkgs.kest;
       });
 
       devShells = eachSystem (pkgs: {
@@ -57,7 +66,7 @@
             golangci-lint
             go-tools
             gopls
-            gomod2nix.packages.${system}.default
+            gomod2nix.packages.${pkgs.stdenv.hostPlatform.system}.default
           ];
           shellHook = ''
             echo "kestrel devshell"
