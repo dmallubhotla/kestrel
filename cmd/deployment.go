@@ -18,7 +18,7 @@ var deploymentInfoCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for envName, envCfg := range cfg.Environments {
 			fmt.Printf("env: %s\n", envName)
-			if err := helm.List(cfg, envCfg.KubeContext); err != nil {
+			if err := helm.List(cfg, envCfg); err != nil {
 				fmt.Printf("  (could not retrieve info: %v)\n", err)
 			}
 			fmt.Println()

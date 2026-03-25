@@ -11,7 +11,16 @@ import (
 
 // Deploy runs a helm upgrade --install with the appropriate flags,
 // mirroring the logic from common-helm-deploy.sh.
-func Deploy(cfg *config.Config, env string, kubeContext string, tag string, extraArgs []string) error {
+func envMap(awsProfile string) map[string]string {
+	if awsProfile == "" {
+		return nil
+	}
+	return map[string]string{"AWS_PROFILE": awsProfile}
+}
+
+// Deploy runs a helm upgrade --install with the appropriate flags,
+// mirroring the logic from common-helm-deploy.sh.
+func Deploy(cfg *config.Config, env string, envCfg config.EnvConfig, tag string, extraArgs []string) error {
 	valuesDir := cfg.Helm.ValuesDir
 
 	args := []string{
@@ -22,7 +31,7 @@ func Deploy(cfg *config.Config, env string, kubeContext string, tag string, extr
 		"--install",
 		"--history-max", "0",
 		"--timeout", "5m0s",
-		"--kube-context", kubeContext,
+		"--kube-context", envCfg.KubeContext,
 	}
 
 	// Layer values files: shared.yaml first, then <env>.yaml
@@ -47,24 +56,24 @@ func Deploy(cfg *config.Config, env string, kubeContext string, tag string, extr
 	// Extra args passed through
 	args = append(args, extraArgs...)
 
-	return runner.Run("helm", args...)
+	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", args...)
 }
 
 // List shows deployment info for a release.
-func List(cfg *config.Config, kubeContext string) error {
-	return runner.Run("helm", "ls",
-		"--kube-context", kubeContext,
+func List(cfg *config.Config, envCfg config.EnvConfig) error {
+	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", "ls",
+		"--kube-context", envCfg.KubeContext,
 		"-n", cfg.Helm.Namespace,
 	)
 }
 
 // Uninstall removes a helm release.
-func Uninstall(cfg *config.Config, kubeContext string) error {
-	return runner.Run("helm", "uninstall",
+func Uninstall(cfg *config.Config, envCfg config.EnvConfig) error {
+	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", "uninstall",
 		"--namespace", cfg.Helm.Namespace,
 		"--wait",
 		"--timeout", "5m0s",
-		"--kube-context", kubeContext,
+		"--kube-context", envCfg.KubeContext,
 		cfg.Helm.ReleaseName,
 	)
 }

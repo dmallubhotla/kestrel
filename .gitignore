@@ -48,3 +48,7 @@ Icon
 ._*
 
 result
+.direnv
+.env
+*.env
+.envrc

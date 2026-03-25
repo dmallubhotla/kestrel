@@ -14,7 +14,11 @@ var terraformCmd = &cobra.Command{
 		if environment == "" {
 			return cmd.Help()
 		}
-		return terraform.Run(cfg, environment, args)
+		envCfg, err := cfg.ResolveEnv(environment)
+		if err != nil {
+			return err
+		}
+		return terraform.Run(cfg, environment, envCfg, args)
 	},
 	// Don't parse flags after the first positional arg — pass them to terraform.
 	DisableFlagParsing: false,

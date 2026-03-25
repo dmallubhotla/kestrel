@@ -28,6 +28,7 @@ type TerraformConfig struct {
 
 type EnvConfig struct {
 	KubeContext string `yaml:"kube_context"`
+	AwsProfile  string `yaml:"aws_profile"`
 }
 
 const configFileName = ".kestconfig"

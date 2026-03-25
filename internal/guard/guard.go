@@ -7,13 +7,20 @@ import (
 	"strings"
 )
 
-// CheckCI returns an error if we're not in a CI environment.
-func CheckCI() error {
-	// Common CI env vars
+// IsCI returns true if running in a CI environment.
+func IsCI() bool {
 	for _, v := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "JENKINS_URL", "BUILDKITE"} {
 		if os.Getenv(v) != "" {
-			return nil
+			return true
 		}
+	}
+	return false
+}
+
+// CheckCI returns an error if we're not in a CI environment.
+func CheckCI() error {
+	if IsCI() {
+		return nil
 	}
 	return fmt.Errorf("not in CI environment, no deploys! Use --force-from-laptop to override")
 }

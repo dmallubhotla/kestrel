@@ -5,6 +5,9 @@ import (
 	"os"
 
 	"github.com/example/kestrel/internal/config"
+	"github.com/example/kestrel/internal/guard"
+	"github.com/example/kestrel/internal/logging"
+	"github.com/example/kestrel/internal/profile"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +15,7 @@ var (
 	environment string
 	verbose     bool
 	cfg         *config.Config
+	logCleanup  func()
 )
 
 var rootCmd = &cobra.Command{
@@ -19,7 +23,14 @@ var rootCmd = &cobra.Command{
 	Short: "Kestrel — unified helm & terraform orchestration",
 	Long:  "A CLI that wraps Helm and Terraform workflows per-project, driven by .kestconfig files.",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		var err error
+		// Set up file logging (non-fatal if it fails)
+		cleanup, err := logging.Init()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not initialize logging: %v\n", err)
+		} else {
+			logCleanup = cleanup
+		}
+
 		cfg, err = config.Load()
 		if err != nil {
 			return err
@@ -28,7 +39,24 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "debug: config loaded (chart=%s, iac_dir=%s)\n",
 				cfg.Helm.Chart, cfg.Terraform.IACDir)
 		}
+
+		// Fall back to active profile when no -e flag (skip in CI)
+		if environment == "" && !guard.IsCI() {
+			active, err := profile.Read()
+			if err == nil && active != "" {
+				environment = active
+				if verbose {
+					fmt.Fprintf(os.Stderr, "debug: using active profile %q\n", active)
+				}
+			}
+		}
+
 		return nil
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if logCleanup != nil {
+			logCleanup()
+		}
 	},
 }
 

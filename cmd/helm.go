@@ -61,7 +61,7 @@ var helmDeployCmd = &cobra.Command{
 		}
 		fmt.Fprintf(os.Stderr, "info: deploying container version: %s\n", tag)
 
-		return helm.Deploy(cfg, environment, envCfg.KubeContext, tag, args)
+		return helm.Deploy(cfg, environment, envCfg, tag, args)
 	},
 }
 
@@ -76,7 +76,7 @@ var helmListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return helm.List(cfg, envCfg.KubeContext)
+		return helm.List(cfg, envCfg)
 	},
 }
 
@@ -91,7 +91,7 @@ var helmUninstallCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return helm.Uninstall(cfg, envCfg.KubeContext)
+		return helm.Uninstall(cfg, envCfg)
 	},
 }
 
