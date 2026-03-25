@@ -3,6 +3,7 @@
 {
   projectRootFile = "treefmt.nix";
   settings.global.excludes = [
+    "examples/*"
   ];
 
   programs.deadnix.enable = true;
@@ -20,5 +21,4 @@
   programs.just.enable = true;
 
   programs.gofmt.enable = true;
-  programs.golangci-lint.enable = true;
 }

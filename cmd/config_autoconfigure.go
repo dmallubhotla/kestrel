@@ -85,8 +85,8 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		}
 
 		m := multiSelectModel{
-			title: "Select AWS profiles",
-			items: make([]selectItem, len(profiles)),
+			title:    "Select AWS profiles",
+			items:    make([]selectItem, len(profiles)),
 			selected: preselected,
 		}
 		for i, p := range profiles {
@@ -216,7 +216,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 
 			entry := envEntry{
 				name:        shortName,
-				kubeContext:  ctx.Name,
+				kubeContext: ctx.Name,
 			}
 			if sm.cursor > 0 {
 				prof := selectedProfiles[sm.cursor-1]
@@ -233,7 +233,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		for _, ctx := range selectedContexts {
 			envs = append(envs, envEntry{
 				name:        kubeconfig.ShortName(ctx.Name),
-				kubeContext:  ctx.Name,
+				kubeContext: ctx.Name,
 			})
 		}
 	}

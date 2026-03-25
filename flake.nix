@@ -41,7 +41,7 @@
           ]
         );
       treefmtEval = eachSystem (pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
-      kestOverlay = final: prev: {
+      kestOverlay = final: _prev: {
         kest = final.buildGoApplication {
           pname = "kest";
           version = "0.1.0";
