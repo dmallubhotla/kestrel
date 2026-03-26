@@ -10,9 +10,9 @@ import (
 )
 
 type Config struct {
-	Helm         HelmConfig           `yaml:"helm"`
-	Terraform    TerraformConfig      `yaml:"terraform"`
-	Environments map[string]EnvConfig `yaml:"environments"`
+	Helm         HelmConfig           `yaml:"helm,omitempty"`
+	Terraform    TerraformConfig      `yaml:"terraform,omitempty"`
+	Environments map[string]EnvConfig `yaml:"environments,omitempty"`
 
 	// Sources tracks which config files were loaded (not serialised).
 	Sources Sources `yaml:"-"`
@@ -25,20 +25,20 @@ type Sources struct {
 }
 
 type HelmConfig struct {
-	Chart         string   `yaml:"chart"`
-	ValuesDir     string   `yaml:"values_dir"`
-	DeployScripts []string `yaml:"deploy_scripts"`
-	ReleaseName   string   `yaml:"release_name"`
-	Namespace     string   `yaml:"namespace"`
+	Chart         string   `yaml:"chart,omitempty"`
+	ValuesDir     string   `yaml:"values_dir,omitempty"`
+	DeployScripts []string `yaml:"deploy_scripts,omitempty"`
+	ReleaseName   string   `yaml:"release_name,omitempty"`
+	Namespace     string   `yaml:"namespace,omitempty"`
 }
 
 type TerraformConfig struct {
-	IACDir string `yaml:"iac_dir"`
+	IACDir string `yaml:"iac_dir,omitempty"`
 }
 
 type EnvConfig struct {
-	KubeContext string `yaml:"kube_context"`
-	AwsProfile  string `yaml:"aws_profile"`
+	KubeContext string `yaml:"kube_context,omitempty"`
+	AwsProfile  string `yaml:"aws_profile,omitempty"`
 }
 
 const (

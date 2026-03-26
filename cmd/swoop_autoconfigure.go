@@ -19,14 +19,18 @@ var swoopAutoconfigureForce bool
 
 var swoopAutoconfigureCmd = &cobra.Command{
 	Use:   "autoconfigure",
-	Short: "Auto-discover terraform roots and map profile directories to AWS profiles",
-	Long: `Walks the project to discover terraform roots, identifies account profile
-directories, and attempts to match them to AWS profiles from ~/.aws/config.
+	Short: "Auto-discover terraform roots and map environments to AWS profiles",
+	Long: `Walks the project to discover terraform roots, detects the IaC layout
+(service-embedded or centralized), and maps environments to AWS profiles.
 
-When a match is ambiguous, you'll be prompted to select the correct AWS profile.
-The result is written to the project's .kestconfig file.
+For service repos (misc/iac/live/{env}/ pattern), sets terraform.iac_dir
+and creates environment entries for each env directory found.
 
-Existing config is preserved unless --force is used.`,
+For centralized IaC repos, creates environment entries for each top-level
+account profile directory.
+
+Existing environments from global config are reused when they match.
+Use --force to overwrite existing environment mappings.`,
 	RunE: runSwoopAutoconfigure,
 }
 
@@ -36,44 +40,44 @@ func init() {
 }
 
 func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
-	// Step 1: Discover roots.
-	baseDir, err := resolveBaseDirForAutoconfigure()
+	// Step 1: Discover roots from project root (not iac_dir).
+	projectRoot, err := resolveProjectRoot()
 	if err != nil {
 		return err
 	}
 
-	roots, err := swoop.Discover(baseDir)
+	roots, err := swoop.Discover(projectRoot)
 	if err != nil {
 		return fmt.Errorf("discovering roots: %w", err)
 	}
 	if len(roots) == 0 {
-		return fmt.Errorf("no terraform roots found under %s", baseDir)
+		return fmt.Errorf("no terraform roots found under %s", projectRoot)
 	}
 
-	// Step 2: Analyze profile directories.
-	profiles := swoop.InspectProfiles(roots)
+	// Step 2: Detect layout.
+	layout := swoop.DetectLayout(roots)
 
-	fmt.Printf("Found %d terraform root(s) across %d profile(s):\n", len(roots), len(profiles))
-	for _, p := range profiles {
-		acctInfo := ""
-		if len(p.AccountIDs) > 0 {
-			acctInfo = fmt.Sprintf("  (account: %s)", strings.Join(p.AccountIDs, ", "))
-		}
-		fmt.Printf("  %s: %d root(s)%s\n", p.Name, p.RootCount, acctInfo)
-	}
-
-	// Detect archetype.
-	if len(profiles) == 1 && profiles[0].Name == "live" {
-		fmt.Println("\nDetected: service-embedded IaC layout (live/{env}/ pattern)")
+	fmt.Printf("Found %d terraform root(s)\n", len(roots))
+	if layout.Type == "service" {
+		fmt.Printf("Detected: service-embedded IaC (iac_dir: %s)\n", layout.IACDir)
 	} else {
-		fmt.Println("\nDetected: centralized IaC layout (multi-account profile directories)")
+		fmt.Println("Detected: centralized IaC layout")
+	}
+	fmt.Printf("Environments: %s\n", strings.Join(layout.EnvNames, ", "))
+
+	// For service layout, also inspect the roots for account IDs (useful for matching).
+	profiles := swoop.InspectProfiles(roots)
+	for _, p := range profiles {
+		if len(p.AccountIDs) > 0 {
+			fmt.Printf("  Account IDs in %s: %s\n", p.Name, strings.Join(p.AccountIDs, ", "))
+		}
 	}
 
-	// Step 3: Read AWS profiles.
+	// Step 3: Read AWS profiles for matching.
 	awsProfiles, awsErr := awsconfig.ReadProfileDetails()
 	if awsErr != nil {
 		fmt.Printf("\nNote: could not read AWS profiles: %v\n", awsErr)
-		fmt.Println("Skipping AWS profile matching. You can add aws_profile manually to .kestconfig.")
+		fmt.Println("Skipping AWS profile matching. You can add aws_profile manually.")
 		awsProfiles = nil
 	} else if len(awsProfiles) > 0 {
 		names := make([]string, len(awsProfiles))
@@ -83,23 +87,54 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nFound %d AWS profile(s): %s\n", len(awsProfiles), strings.Join(names, ", "))
 	}
 
-	// Step 4: Match profile dirs to AWS profiles.
+	// Step 4: Build environment map.
+	// Start from global config environments as a base — service repos should
+	// reuse the globally configured environments.
 	envMap := make(map[string]config.EnvConfig)
 
-	for _, profileDir := range profiles {
+	// Collect account IDs across all profile dirs for matching.
+	allAccountIDs := make(map[string][]string) // env name → account IDs
+	for _, p := range profiles {
+		if len(p.AccountIDs) > 0 {
+			allAccountIDs[p.Name] = p.AccountIDs
+		}
+	}
+
+	for _, envName := range layout.EnvNames {
+		// Check if this environment already exists in global config.
+		if cfg != nil {
+			if existing, ok := cfg.Environments[envName]; ok {
+				envMap[envName] = existing
+				fmt.Printf("\n  %s → reusing global config (aws: %s)\n", envName, existing.AwsProfile)
+				continue
+			}
+		}
+
+		// Try to match to an AWS profile.
 		var awsProfileName string
-
 		if len(awsProfiles) > 0 {
-			bestIdx := bestAWSProfileMatch(profileDir, awsProfiles)
+			// Build a synthetic ProfileInfo for matching.
+			pi := swoop.ProfileInfo{
+				Name:       envName,
+				AccountIDs: allAccountIDs[envName],
+			}
+			// Also check parent profile's account IDs for service repos
+			// where the env name (dev) may differ from the discovery profile (misc).
+			if layout.Type == "service" {
+				for _, p := range profiles {
+					if len(p.AccountIDs) > 0 && len(pi.AccountIDs) == 0 {
+						pi.AccountIDs = p.AccountIDs
+					}
+				}
+			}
 
+			bestIdx := bestAWSProfileMatch(pi, awsProfiles)
 			if bestIdx >= 0 {
-				// Confident match — show it and use it.
 				awsProfileName = awsProfiles[bestIdx].Name
-				fmt.Printf("\n  %s → %s (auto-matched)\n", profileDir.Name, awsProfileName)
+				fmt.Printf("\n  %s → %s (auto-matched)\n", envName, awsProfileName)
 			} else {
-				// No confident match — prompt.
 				fmt.Println()
-				selected, err := promptAWSProfile(profileDir, awsProfiles)
+				selected, err := promptAWSProfile(pi, awsProfiles)
 				if err != nil {
 					return err
 				}
@@ -107,7 +142,7 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		envMap[profileDir.Name] = config.EnvConfig{
+		envMap[envName] = config.EnvConfig{
 			AwsProfile: awsProfileName,
 		}
 	}
@@ -117,13 +152,20 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 		Environments: envMap,
 	}
 
-	// Determine project config path.
-	configPath, existing, err := resolveProjectConfigPath(baseDir)
+	// Set iac_dir for service repos.
+	if layout.Type == "service" {
+		proposed.Terraform = config.TerraformConfig{
+			IACDir: layout.IACDir,
+		}
+	}
+
+	// Determine project config path and load existing.
+	configPath, existing, err := resolveProjectConfigPath(projectRoot)
 	if err != nil {
 		return err
 	}
 
-	// Merge with existing config if present.
+	// Merge with existing project config if present.
 	if existing != nil {
 		proposed = mergeAutoconfigureResult(existing, proposed, swoopAutoconfigureForce)
 	}
@@ -172,25 +214,18 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveBaseDirForAutoconfigure determines the directory to scan.
-// Uses cwd by default since autoconfigure is typically run at the repo root.
-func resolveBaseDirForAutoconfigure() (string, error) {
-	// If terraform.iac_dir is configured, use it.
-	if cfg != nil && cfg.Terraform.IACDir != "" {
-		if cfg.Sources.Project != "" {
-			projectRoot := filepath.Dir(cfg.Sources.Project)
-			return filepath.Abs(filepath.Join(projectRoot, cfg.Terraform.IACDir))
-		}
-		return filepath.Abs(cfg.Terraform.IACDir)
+// resolveProjectRoot returns the project root directory.
+// Uses the .kestconfig location if found, otherwise cwd.
+func resolveProjectRoot() (string, error) {
+	if cfg != nil && cfg.Sources.Project != "" {
+		return filepath.Abs(filepath.Dir(cfg.Sources.Project))
 	}
-
 	return os.Getwd()
 }
 
 // resolveProjectConfigPath determines where to write the .kestconfig and
 // loads any existing config from that path.
-func resolveProjectConfigPath(baseDir string) (string, *config.Config, error) {
-	// Check if there's already a .kestconfig.
+func resolveProjectConfigPath(projectRoot string) (string, *config.Config, error) {
 	if cfg != nil && cfg.Sources.Project != "" {
 		existing, err := config.LoadFromPath(cfg.Sources.Project)
 		if err != nil {
@@ -199,15 +234,19 @@ func resolveProjectConfigPath(baseDir string) (string, *config.Config, error) {
 		return cfg.Sources.Project, existing, nil
 	}
 
-	// No existing config — write to baseDir/.kestconfig.
-	path := filepath.Join(baseDir, ".kestconfig")
+	path := filepath.Join(projectRoot, ".kestconfig")
 	return path, nil, nil
 }
 
-// mergeAutoconfigureResult merges autoconfigure's proposed environments into
+// mergeAutoconfigureResult merges autoconfigure's proposed config into
 // an existing config. Without force, existing environments are preserved.
 func mergeAutoconfigureResult(existing, proposed *config.Config, force bool) *config.Config {
 	result := *existing
+
+	// Set iac_dir if proposed and not already set (or force).
+	if proposed.Terraform.IACDir != "" && (result.Terraform.IACDir == "" || force) {
+		result.Terraform.IACDir = proposed.Terraform.IACDir
+	}
 
 	if result.Environments == nil {
 		result.Environments = make(map[string]config.EnvConfig)
@@ -215,13 +254,12 @@ func mergeAutoconfigureResult(existing, proposed *config.Config, force bool) *co
 
 	for name, env := range proposed.Environments {
 		if _, exists := result.Environments[name]; exists && !force {
-			// Preserve existing environment config.
 			continue
 		}
-		// Merge: keep existing kube_context if we're only adding aws_profile.
-		if existing, ok := result.Environments[name]; ok {
-			if env.KubeContext == "" && existing.KubeContext != "" {
-				env.KubeContext = existing.KubeContext
+		// Preserve existing kube_context when only adding aws_profile.
+		if ex, ok := result.Environments[name]; ok {
+			if env.KubeContext == "" && ex.KubeContext != "" {
+				env.KubeContext = ex.KubeContext
 			}
 		}
 		result.Environments[name] = env
@@ -230,7 +268,7 @@ func mergeAutoconfigureResult(existing, proposed *config.Config, force bool) *co
 	return &result
 }
 
-// bestAWSProfileMatch finds the best AWS profile match for a terraform profile dir.
+// bestAWSProfileMatch finds the best AWS profile match for a profile/env.
 // Returns -1 if no confident match.
 func bestAWSProfileMatch(profileDir swoop.ProfileInfo, awsProfiles []awsconfig.Profile) int {
 	bestIdx := -1
@@ -241,14 +279,12 @@ func bestAWSProfileMatch(profileDir swoop.ProfileInfo, awsProfiles []awsconfig.P
 		apLower := strings.ToLower(ap.Name)
 		pdLower := strings.ToLower(profileDir.Name)
 
-		// Exact name match is strongest.
 		if apLower == pdLower {
 			score += 20
 		} else if strings.Contains(apLower, pdLower) || strings.Contains(pdLower, apLower) {
 			score += 5
 		}
 
-		// Account ID match from provider blocks vs sso_account_id.
 		if len(profileDir.AccountIDs) > 0 {
 			ssoAccountID := awsProfileField(ap, "sso_account_id")
 			for _, id := range profileDir.AccountIDs {
@@ -265,7 +301,6 @@ func bestAWSProfileMatch(profileDir swoop.ProfileInfo, awsProfiles []awsconfig.P
 		}
 	}
 
-	// Only return a match if we're reasonably confident.
 	if bestScore < 5 {
 		return -1
 	}
@@ -281,11 +316,9 @@ func awsProfileField(p awsconfig.Profile, key string) string {
 	return ""
 }
 
-// promptAWSProfile shows a single-select picker for choosing an AWS profile
-// for a terraform profile directory.
 func promptAWSProfile(profileDir swoop.ProfileInfo, awsProfiles []awsconfig.Profile) (string, error) {
 	m := singleSelectModel{
-		title: fmt.Sprintf("AWS profile for [%s] (%d roots)", profileDir.Name, profileDir.RootCount),
+		title: fmt.Sprintf("AWS profile for [%s]", profileDir.Name),
 	}
 	m.items = make([]selectItem, 0, len(awsProfiles)+1)
 	m.items = append(m.items, selectItem{name: "(none)"})
@@ -318,9 +351,8 @@ func formatAWSProfilePreview(p awsconfig.Profile) string {
 	return b.String()
 }
 
-// editConfigInEditor opens the config in $EDITOR for manual editing.
-func editConfigInEditor(cfg *config.Config) (*config.Config, error) {
-	data, err := yaml.Marshal(cfg)
+func editConfigInEditor(c *config.Config) (*config.Config, error) {
+	data, err := yaml.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling config: %w", err)
 	}
