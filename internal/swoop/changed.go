@@ -23,13 +23,17 @@ func ChangedRoots(roots []Root, baseDir, ref string) ([]Root, error) {
 		return nil, err
 	}
 
-	// Build a set of root abs paths that have changed .tf files.
+	return matchChangedFiles(roots, baseDir, changedFiles), nil
+}
+
+// matchChangedFiles is the pure logic: given a list of changed file paths
+// (relative to baseDir), return the roots that contain changed .tf files.
+func matchChangedFiles(roots []Root, baseDir string, changedFiles []string) []Root {
 	changedRootPaths := make(map[string]bool)
 	for _, f := range changedFiles {
 		if !strings.HasSuffix(f, ".tf") {
 			continue
 		}
-		// Walk up from the file to find which root contains it.
 		dir := filepath.Dir(f)
 		for _, r := range roots {
 			if pathContains(r.AbsPath, filepath.Join(baseDir, dir)) {
@@ -44,12 +48,11 @@ func ChangedRoots(roots []Root, baseDir, ref string) ([]Root, error) {
 			result = append(result, r)
 		}
 	}
-	return result, nil
+	return result
 }
 
 // mergeBase finds the merge-base between HEAD and main (or master).
 func mergeBase(dir string) (string, error) {
-	// Try main first, fall back to master.
 	for _, branch := range []string{"main", "master"} {
 		cmd := exec.Command("git", "merge-base", "HEAD", branch)
 		cmd.Dir = dir
@@ -58,14 +61,12 @@ func mergeBase(dir string) (string, error) {
 			return strings.TrimSpace(string(out)), nil
 		}
 	}
-	// If no main/master, compare against HEAD (shows uncommitted + staged).
 	return "HEAD", nil
 }
 
 // gitDiffFiles returns the list of changed file paths (relative to repo root)
 // between the given ref and the working tree.
 func gitDiffFiles(dir, ref string) ([]string, error) {
-	// Include both committed changes and working tree changes.
 	cmd := exec.Command("git", "diff", "--name-only", ref)
 	cmd.Dir = dir
 	out, err := cmd.Output()
