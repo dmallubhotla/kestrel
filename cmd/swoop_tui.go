@@ -15,6 +15,16 @@ type swoopAction struct {
 	action string // "plan", "apply", "init", or "" if cancelled
 }
 
+// phase tracks which screen the TUI is on.
+type swoopPhase int
+
+const (
+	phasePickRoot swoopPhase = iota
+	phasePickAction
+)
+
+var swoopActions = []string{"plan", "init", "apply"}
+
 // swoopTUIModel is the bubbletea model for the interactive root picker.
 type swoopTUIModel struct {
 	allRoots []swoop.Root
@@ -24,6 +34,10 @@ type swoopTUIModel struct {
 	cursor   int
 	result   swoopAction
 	width    int
+
+	phase       swoopPhase
+	actionIdx   int // index into swoopActions
+	pickedRoot  swoop.Root
 }
 
 func newSwoopTUI(roots []swoop.Root, state *swoop.State) swoopTUIModel {
@@ -44,63 +58,89 @@ func (m swoopTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc", "q":
-			// q only quits if filter is empty (otherwise it's a filter char).
-			if msg.String() == "q" && m.filter != "" {
-				break // fall through to filter append
-			}
-			return m, tea.Quit
-
-		case "up", "ctrl+p":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-			return m, nil
-		case "down", "ctrl+n":
-			if m.cursor < len(m.filtered)-1 {
-				m.cursor++
-			}
-			return m, nil
-
-		case "enter":
-			if len(m.filtered) > 0 {
-				m.result = swoopAction{root: m.filtered[m.cursor], action: "plan"}
-			}
-			return m, tea.Quit
-
-		case "ctrl+a":
-			if len(m.filtered) > 0 {
-				m.result = swoopAction{root: m.filtered[m.cursor], action: "apply"}
-			}
-			return m, tea.Quit
-
-		case "ctrl+i":
-			if len(m.filtered) > 0 {
-				m.result = swoopAction{root: m.filtered[m.cursor], action: "init"}
-			}
-			return m, tea.Quit
-
-		case "backspace", "ctrl+h":
-			if len(m.filter) > 0 {
-				m.filter = m.filter[:len(m.filter)-1]
-				m.applyFilter()
-			}
-			return m, nil
-
-		case "ctrl+u":
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
+		if m.phase == phasePickAction {
+			return m.updateActionPicker(msg)
 		}
-
-		// Append printable characters to filter.
-		if msg.Type == tea.KeyRunes {
-			m.filter += msg.String()
-			m.applyFilter()
-			return m, nil
-		}
+		return m.updateRootPicker(msg)
 	}
+	return m, nil
+}
+
+func (m swoopTUIModel) updateRootPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	switch key {
+	case "ctrl+c", "esc", "q":
+		if key == "q" && m.filter != "" {
+			break // fall through to filter append
+		}
+		return m, tea.Quit
+
+	case "up", "ctrl+p":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+		return m, nil
+	case "down", "ctrl+n":
+		if m.cursor < len(m.filtered)-1 {
+			m.cursor++
+		}
+		return m, nil
+
+	case "enter":
+		if len(m.filtered) > 0 {
+			m.pickedRoot = m.filtered[m.cursor]
+			m.phase = phasePickAction
+			m.actionIdx = 0
+		}
+		return m, nil
+
+	case "backspace", "ctrl+h":
+		if len(m.filter) > 0 {
+			m.filter = m.filter[:len(m.filter)-1]
+			m.applyFilter()
+		}
+		return m, nil
+
+	case "ctrl+u":
+		m.filter = ""
+		m.applyFilter()
+		return m, nil
+	}
+
+	// Append printable characters to filter.
+	if msg.Type == tea.KeyRunes {
+		m.filter += msg.String()
+		m.applyFilter()
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m swoopTUIModel) updateActionPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "esc", "q":
+		return m, tea.Quit
+
+	case "backspace":
+		// Go back to root picker.
+		m.phase = phasePickRoot
+		return m, nil
+
+	case "tab", "right", "down", "l", "j":
+		m.actionIdx = (m.actionIdx + 1) % len(swoopActions)
+		return m, nil
+
+	case "shift+tab", "left", "up", "h", "k":
+		m.actionIdx = (m.actionIdx - 1 + len(swoopActions)) % len(swoopActions)
+		return m, nil
+
+	case "enter":
+		m.result = swoopAction{root: m.pickedRoot, action: swoopActions[m.actionIdx]}
+		return m, tea.Quit
+	}
+
 	return m, nil
 }
 
@@ -116,6 +156,13 @@ func (m *swoopTUIModel) applyFilter() {
 }
 
 func (m swoopTUIModel) View() string {
+	if m.phase == phasePickAction {
+		return m.viewActionPicker()
+	}
+	return m.viewRootPicker()
+}
+
+func (m swoopTUIModel) viewRootPicker() string {
 	var b strings.Builder
 
 	// Title and filter.
@@ -130,7 +177,6 @@ func (m swoopTUIModel) View() string {
 	if len(m.filtered) == 0 {
 		b.WriteString(swoopDimStyle.Render("  No matching roots\n"))
 	} else {
-		// Show a window of roots around the cursor.
 		windowSize := 15
 		start, end := listWindow(m.cursor, len(m.filtered), windowSize)
 
@@ -180,14 +226,38 @@ func (m swoopTUIModel) View() string {
 		}
 	}
 
-	// Preview pane for selected root.
+	// Preview pane.
 	if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
 		b.WriteString(m.renderPreview(m.filtered[m.cursor]))
 	}
 
-	// Help line.
 	b.WriteString("\n")
-	b.WriteString(swoopHelpStyle.Render("enter: plan · ctrl+a: apply · ctrl+i: init · esc: quit"))
+	b.WriteString(swoopHelpStyle.Render("enter: select · esc: quit · type to filter"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func (m swoopTUIModel) viewActionPicker() string {
+	var b strings.Builder
+
+	b.WriteString(swoopTitleStyle.Render(fmt.Sprintf("Action for %s", m.pickedRoot.Path)))
+	b.WriteString("\n\n")
+
+	for i, action := range swoopActions {
+		if i == m.actionIdx {
+			b.WriteString(fmt.Sprintf("  %s ", swoopActionActive.Render(action)))
+		} else {
+			b.WriteString(fmt.Sprintf("  %s ", swoopActionInactive.Render(action)))
+		}
+	}
+	b.WriteString("\n")
+
+	// Preview of selected root.
+	b.WriteString(m.renderPreview(m.pickedRoot))
+
+	b.WriteString("\n")
+	b.WriteString(swoopHelpStyle.Render("tab/arrows: cycle · enter: confirm · backspace: back · esc: quit"))
 	b.WriteString("\n")
 
 	return b.String()
@@ -267,4 +337,7 @@ var (
 	swoopHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	swoopPreviewHead   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
 	swoopPreviewKey    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+
+	swoopActionActive   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Padding(0, 1)
+	swoopActionInactive = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Padding(0, 1)
 )
