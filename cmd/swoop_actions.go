@@ -198,8 +198,8 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	awsProfile := swoop.ResolveAWSProfile(root, cfg, environment)
 
 	// tfenv preflight check.
-	if warning := swoop.CheckTFVersion(root); warning != "" {
-		fmt.Fprintln(os.Stderr, warning)
+	if err := handleTFVersionCheck(root); err != nil {
+		return err
 	}
 
 	// Print context.
@@ -222,6 +222,48 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	if err != nil {
 		return fmt.Errorf("terraform %s failed: %w", action, err)
 	}
+	return nil
+}
+
+// handleTFVersionCheck checks the terraform version and offers to install via
+// tfenv if there's a mismatch.
+func handleTFVersionCheck(root swoop.Root) error {
+	check := swoop.CheckTFVersion(root)
+	if check.OK {
+		return nil
+	}
+
+	if check.Installed != "" {
+		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from .terraform-version) but %s is active\n",
+			check.Required, check.Installed)
+	} else {
+		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from .terraform-version)\n",
+			check.Required)
+	}
+
+	if !check.TfenvAvailable {
+		fmt.Fprintf(os.Stderr, "  Install manually or use tfenv: tfenv install %s\n", check.Required)
+		return nil // warn but don't block
+	}
+
+	installCmd := swoop.FormatTFVersionCommand(check.Required)
+	fmt.Fprintf(os.Stderr, "\n  %s\n\n", installCmd)
+	fmt.Fprintf(os.Stderr, "Install now? [y/N] ")
+
+	var answer string
+	fmt.Scanln(&answer)
+	answer = strings.TrimSpace(strings.ToLower(answer))
+
+	if answer != "y" && answer != "yes" {
+		fmt.Fprintln(os.Stderr, "Continuing with current terraform version.")
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr)
+	if err := swoop.InstallTFVersion(check.Required); err != nil {
+		return fmt.Errorf("tfenv install failed: %w", err)
+	}
+	fmt.Fprintln(os.Stderr)
 	return nil
 }
 
@@ -250,8 +292,9 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)
 
-		if warning := swoop.CheckTFVersion(root); warning != "" {
-			fmt.Fprintln(os.Stderr, warning)
+		check := swoop.CheckTFVersion(root)
+		if !check.OK {
+			fmt.Fprintf(os.Stderr, "  warning: requires terraform %s but %s is active\n", check.Required, check.Installed)
 		}
 
 		execResult, err := swoop.RunTerraform(root, awsProfile, action)

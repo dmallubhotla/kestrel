@@ -20,6 +20,21 @@ type ExecResult struct {
 	PlanSummary string
 }
 
+// TFVersionCheck is the result of checking the terraform version for a root.
+type TFVersionCheck struct {
+	// OK is true if the version matches or no version constraint exists.
+	OK bool
+
+	// Required is the version from .terraform-version (empty if none).
+	Required string
+
+	// Installed is the version terraform reports from the root dir.
+	Installed string
+
+	// TfenvAvailable is true if tfenv is on PATH.
+	TfenvAvailable bool
+}
+
 // RunTerraform executes terraform with the given args in the root's directory.
 // Output is streamed to stdout/stderr. The awsProfile is injected as AWS_PROFILE
 // if non-empty.
@@ -69,8 +84,6 @@ func (t *teeWriter) Write(p []byte) (int, error) {
 }
 
 // parsePlanSummary extracts the plan summary from terraform plan output.
-// Looks for lines like "Plan: 1 to add, 2 to change, 0 to destroy." or
-// "No changes. Your infrastructure matches the configuration."
 var planSummaryRe = regexp.MustCompile(`Plan: (.+?)\.$`)
 
 func parsePlanSummary(output string) string {
@@ -87,30 +100,50 @@ func parsePlanSummary(output string) string {
 	return ""
 }
 
-// CheckTFVersion validates that the required terraform version (from .terraform-version)
-// is available. Returns a user-friendly warning message if not, or empty string if OK.
-func CheckTFVersion(root Root) string {
+// CheckTFVersion checks whether the terraform version available in the root
+// directory matches the .terraform-version requirement.
+func CheckTFVersion(root Root) TFVersionCheck {
 	if root.TFVersion == "" {
-		return ""
+		return TFVersionCheck{OK: true}
 	}
 
-	// Check if terraform is available at all.
-	out, err := exec.Command("terraform", "version").Output()
+	// Run terraform version from the root dir so tfenv picks up .terraform-version.
+	cmd := exec.Command("terraform", "version")
+	cmd.Dir = root.AbsPath
+	out, err := cmd.Output()
 	if err != nil {
-		return fmt.Sprintf("warning: terraform not found on PATH")
+		tfenv := hasTfenv()
+		return TFVersionCheck{
+			Required:       root.TFVersion,
+			TfenvAvailable: tfenv,
+		}
 	}
 
-	// Parse the installed version from "Terraform vX.Y.Z" line.
 	installed := parseTerraformVersion(string(out))
 	if installed == "" {
-		return ""
+		return TFVersionCheck{OK: true, Required: root.TFVersion}
 	}
 
-	if installed != root.TFVersion {
-		return fmt.Sprintf("warning: root requires terraform %s (from .terraform-version) but %s is active\n  If using tfenv: tfenv install %s && tfenv use %s",
-			root.TFVersion, installed, root.TFVersion, root.TFVersion)
+	tfenv := hasTfenv()
+	return TFVersionCheck{
+		OK:             installed == root.TFVersion,
+		Required:       root.TFVersion,
+		Installed:      installed,
+		TfenvAvailable: tfenv,
 	}
-	return ""
+}
+
+// InstallTFVersion runs `tfenv install <version>` with output streamed to stderr.
+func InstallTFVersion(version string) error {
+	cmd := exec.Command("tfenv", "install", version)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func hasTfenv() bool {
+	_, err := exec.LookPath("tfenv")
+	return err == nil
 }
 
 var tfVersionRe = regexp.MustCompile(`Terraform v(\d+\.\d+\.\d+)`)
@@ -121,4 +154,9 @@ func parseTerraformVersion(output string) string {
 		return m[1]
 	}
 	return ""
+}
+
+// FormatTFVersionCommand returns the command string that would install the version.
+func FormatTFVersionCommand(version string) string {
+	return fmt.Sprintf("tfenv install %s", version)
 }
