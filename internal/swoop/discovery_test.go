@@ -1,0 +1,215 @@
+package swoop
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+)
+
+// helper to create a minimal terraform root with a backend block.
+func createTFRoot(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `terraform {
+  backend "s3" {
+    bucket = "my-bucket"
+    key    = "test/terraform.tfstate"
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDiscover_BasicStructure(t *testing.T) {
+	base := t.TempDir()
+
+	// Create a few roots mimicking iac-live layout.
+	createTFRoot(t, filepath.Join(base, "dev", "networking", "vpc"))
+	createTFRoot(t, filepath.Join(base, "dev", "data-stores", "fhr-db"))
+	createTFRoot(t, filepath.Join(base, "prd", "us-east-1", "prod", "vpc"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paths := rootPaths(roots)
+	sort.Strings(paths)
+
+	expected := []string{
+		filepath.Join("dev", "data-stores", "fhr-db"),
+		filepath.Join("dev", "networking", "vpc"),
+		filepath.Join("prd", "us-east-1", "prod", "vpc"),
+	}
+	if len(paths) != len(expected) {
+		t.Fatalf("got %d roots, want %d: %v", len(paths), len(expected), paths)
+	}
+	for i, p := range expected {
+		if paths[i] != p {
+			t.Errorf("root[%d] = %q, want %q", i, paths[i], p)
+		}
+	}
+}
+
+func TestDiscover_ProfileExtraction(t *testing.T) {
+	base := t.TempDir()
+
+	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
+	createTFRoot(t, filepath.Join(base, "prd", "vpc"))
+	createTFRoot(t, filepath.Join(base, "dr", "vpc"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	profiles := make(map[string]string)
+	for _, r := range roots {
+		profiles[r.Path] = r.Profile
+	}
+
+	want := map[string]string{
+		filepath.Join("dev", "vpc"): "dev",
+		filepath.Join("prd", "vpc"): "prd",
+		filepath.Join("dr", "vpc"):  "dr",
+	}
+	for path, wantProfile := range want {
+		if got := profiles[path]; got != wantProfile {
+			t.Errorf("profile for %q = %q, want %q", path, got, wantProfile)
+		}
+	}
+}
+
+func TestDiscover_TFVersionReading(t *testing.T) {
+	base := t.TempDir()
+
+	root := filepath.Join(base, "dev", "vpc")
+	createTFRoot(t, root)
+	os.WriteFile(filepath.Join(root, ".terraform-version"), []byte("1.9.2\n"), 0o644)
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 {
+		t.Fatalf("got %d roots, want 1", len(roots))
+	}
+	if roots[0].TFVersion != "1.9.2" {
+		t.Errorf("TFVersion = %q, want %q", roots[0].TFVersion, "1.9.2")
+	}
+}
+
+func TestDiscover_InitDetection(t *testing.T) {
+	base := t.TempDir()
+
+	root := filepath.Join(base, "dev", "vpc")
+	createTFRoot(t, root)
+
+	// Not initialized yet.
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots[0].Initialized {
+		t.Error("root should not be initialized")
+	}
+
+	// Create .terraform dir.
+	os.MkdirAll(filepath.Join(root, ".terraform"), 0o755)
+
+	roots, err = Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !roots[0].Initialized {
+		t.Error("root should be initialized")
+	}
+}
+
+func TestDiscover_SkipsDotDirs(t *testing.T) {
+	base := t.TempDir()
+
+	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
+	// This should be skipped — it's inside a .terraform directory.
+	createTFRoot(t, filepath.Join(base, "dev", "vpc", ".terraform", "modules", "foo"))
+	// This should be skipped — hidden directory.
+	createTFRoot(t, filepath.Join(base, ".hidden", "vpc"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(roots) != 1 {
+		t.Fatalf("got %d roots, want 1: %v", len(roots), rootPaths(roots))
+	}
+	if roots[0].Path != filepath.Join("dev", "vpc") {
+		t.Errorf("got %q, want %q", roots[0].Path, filepath.Join("dev", "vpc"))
+	}
+}
+
+func TestDiscover_SkipsDirsWithoutBackend(t *testing.T) {
+	base := t.TempDir()
+
+	// A directory with .tf files but no backend block should not be a root.
+	noBackend := filepath.Join(base, "dev", "misc")
+	os.MkdirAll(noBackend, 0o755)
+	os.WriteFile(filepath.Join(noBackend, "main.tf"), []byte(`
+provider "aws" {
+  region = "us-east-1"
+}
+`), 0o644)
+
+	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(roots) != 1 {
+		t.Fatalf("got %d roots, want 1: %v", len(roots), rootPaths(roots))
+	}
+}
+
+func TestDiscover_ServiceEmbeddedLayout(t *testing.T) {
+	base := t.TempDir()
+
+	// Service repo layout: misc/iac/live/{env}/
+	createTFRoot(t, filepath.Join(base, "live", "dev"))
+	createTFRoot(t, filepath.Join(base, "live", "stage"))
+	createTFRoot(t, filepath.Join(base, "live", "prod"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(roots) != 3 {
+		t.Fatalf("got %d roots, want 3: %v", len(roots), rootPaths(roots))
+	}
+
+	// Profile should be "live" for all (first path component).
+	for _, r := range roots {
+		if r.Profile != "live" {
+			t.Errorf("profile for %q = %q, want %q", r.Path, r.Profile, "live")
+		}
+	}
+}
+
+func rootPaths(roots []Root) []string {
+	out := make([]string, len(roots))
+	for i, r := range roots {
+		out[i] = r.Path
+	}
+	return out
+}

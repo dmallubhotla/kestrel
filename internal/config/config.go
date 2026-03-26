@@ -218,6 +218,30 @@ func WriteGlobal(cfg *Config) error {
 	return nil
 }
 
+// WriteToPath writes the given config to an arbitrary path with backup rotation.
+func WriteToPath(cfg *Config, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+
+	rotateBackups(path)
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshalling config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// LoadFromPath reads a config from a specific file path.
+func LoadFromPath(path string) (*Config, error) {
+	return loadFile(path)
+}
+
 // LoadGlobal reads only the global config file (no project merge).
 func LoadGlobal() (*Config, error) {
 	return loadFile(GlobalConfigPath())

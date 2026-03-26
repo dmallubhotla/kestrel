@@ -1,0 +1,30 @@
+package swoop
+
+import "time"
+
+// Root represents a discovered terraform root directory.
+type Root struct {
+	// Path is the root's path relative to the discovery base directory.
+	Path string
+
+	// AbsPath is the absolute filesystem path.
+	AbsPath string
+
+	// Profile is the inferred account profile (top-level directory name).
+	// For service-embedded IaC this may be the environment name (e.g. "dev").
+	Profile string
+
+	// TFVersion is the terraform version from .terraform-version, if present.
+	TFVersion string
+
+	// Initialized is true when a .terraform/ directory exists in the root.
+	Initialized bool
+}
+
+// StateEntry records when terraform actions were last run against a root.
+type StateEntry struct {
+	LastInit   *time.Time `yaml:"last_init,omitempty"`
+	LastPlan   *time.Time `yaml:"last_plan,omitempty"`
+	LastApply  *time.Time `yaml:"last_apply,omitempty"`
+	PlanResult string     `yaml:"plan_result,omitempty"`
+}
