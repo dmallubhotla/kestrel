@@ -8,8 +8,9 @@ import (
 )
 
 var deploymentCmd = &cobra.Command{
-	Use:   "deployment",
-	Short: "Deployment information (stretch feature)",
+	Use:     "deployment",
+	Short:   "Deployment information (stretch feature)",
+	GroupID: "deploy",
 }
 
 var deploymentInfoCmd = &cobra.Command{

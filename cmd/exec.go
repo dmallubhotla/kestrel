@@ -11,8 +11,9 @@ import (
 )
 
 var execCmd = &cobra.Command{
-	Use:   "exec <command> [args...]",
-	Short: "Run a command with the active profile's environment",
+	Use:     "exec <command> [args...]",
+	Short:   "Run a command with the active profile's environment",
+	GroupID: "deploy",
 	Long: `Executes the given command after configuring the shell environment
 for the active profile:
 
@@ -24,10 +25,10 @@ Use -- to separate kest flags from the wrapped command's flags:
   kest -e dev exec -- kubectl get pods
   kest exec -- stern -n my-ns my-service
   kest exec -- helm list -A`,
-	Args:                  cobra.MinimumNArgs(1),
-	DisableFlagParsing:    false,
-	SilenceUsage:          true,
-	SilenceErrors:         true,
+	Args:               cobra.MinimumNArgs(1),
+	DisableFlagParsing: false,
+	SilenceUsage:       true,
+	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if environment == "" {
 			return fmt.Errorf("no environment: use -e <env> or set a profile with 'kest profile use'")

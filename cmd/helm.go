@@ -19,6 +19,7 @@ var helmCmd = &cobra.Command{
 	Use:     "release",
 	Aliases: []string{"helm"},
 	Short:   "Helm release operations (deploy, list, uninstall)",
+	GroupID: "deploy",
 }
 
 var helmDeployCmd = &cobra.Command{

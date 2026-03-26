@@ -11,8 +11,9 @@ import (
 )
 
 var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Show configuration details",
+	Use:     "config",
+	Short:   "Show configuration details",
+	GroupID: "config",
 }
 
 var configPathsCmd = &cobra.Command{

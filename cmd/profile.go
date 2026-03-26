@@ -15,8 +15,9 @@ import (
 )
 
 var profileCmd = &cobra.Command{
-	Use:   "profile",
-	Short: "Manage the active kest environment profile",
+	Use:     "profile",
+	Short:   "Manage the active kest environment profile",
+	GroupID: "config",
 }
 
 var profileCurrentCmd = &cobra.Command{

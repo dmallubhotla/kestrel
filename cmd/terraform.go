@@ -6,10 +6,11 @@ import (
 )
 
 var terraformCmd = &cobra.Command{
-	Use:   "terraform [subcommand] [flags]",
-	Short: "Run terraform commands in the appropriate environment directory",
-	Long:  "Proxies terraform commands into the correct misc/iac/live/<env>/ directory.",
-	Args:  cobra.MinimumNArgs(1),
+	Use:     "terraform [subcommand] [flags]",
+	Short:   "Run terraform commands in the appropriate environment directory",
+	GroupID: "deploy",
+	Long:    "Proxies terraform commands into the correct misc/iac/live/<env>/ directory.",
+	Args:    cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if environment == "" {
 			return cmd.Help()
