@@ -35,9 +35,9 @@ type swoopTUIModel struct {
 	result   swoopAction
 	width    int
 
-	phase       swoopPhase
-	actionIdx   int // index into swoopActions
-	pickedRoot  swoop.Root
+	phase      swoopPhase
+	actionIdx  int // index into swoopActions
+	pickedRoot swoop.Root
 }
 
 func newSwoopTUI(roots []swoop.Root, state *swoop.State) swoopTUIModel {
