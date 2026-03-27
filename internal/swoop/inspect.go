@@ -72,10 +72,6 @@ var allowedAccountRe = regexp.MustCompile(`allowed_account_ids\s*=\s*\["(\d{12})
 //	account_id     = "123456789012"
 var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 
-// roleArnAccountRe matches account IDs in IAM role ARNs:
-//
-//	role_arn = "arn:aws:iam::123456789012:role/tf-runner"
-var roleArnAccountRe = regexp.MustCompile(`arn:aws:iam::(\d{12}):`)
 
 // extractAccountIDs scans .tf and .hcl files in a directory for account ID values.
 func extractAccountIDs(dir string) []string {
@@ -132,6 +128,9 @@ func extractAncestorAccountIDs(dir, stopAt string) []string {
 
 // appendAccountIDsFromFile scans a single file for account ID patterns,
 // appending any new IDs to the provided slice.
+//
+// appendAccountIDsFromFile scans a single file for account ID patterns,
+// appending any new IDs to the provided slice.
 func appendAccountIDsFromFile(path string, ids []string) []string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -148,11 +147,6 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 			}
 		}
 		if m := hclAccountRe.FindStringSubmatch(line); len(m) > 1 {
-			if !contains(ids, m[1]) {
-				ids = append(ids, m[1])
-			}
-		}
-		if m := roleArnAccountRe.FindStringSubmatch(line); len(m) > 1 {
 			if !contains(ids, m[1]) {
 				ids = append(ids, m[1])
 			}
