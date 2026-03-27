@@ -72,22 +72,49 @@ var configEnvsCmd = &cobra.Command{
 		}
 		sort.Strings(names)
 
+		hasProject := cfg.HasProjectEnvs()
+		var needsSetup []string
+
 		var rows []string
 		for _, name := range names {
 			env := cfg.Environments[name]
 			parts := []string{name}
+
+			// Show infra fields if project config defines them.
+			if hasProject {
+				if env.AwsAccountID != "" {
+					parts = append(parts, fmt.Sprintf("account=%s", env.AwsAccountID))
+				}
+				if env.Cluster != "" {
+					parts = append(parts, fmt.Sprintf("cluster=%s", env.Cluster))
+				}
+			}
+
 			if env.KubeContext != "" {
 				parts = append(parts, fmt.Sprintf("context=%s", env.KubeContext))
 			}
 			if env.AwsProfile != "" {
 				parts = append(parts, fmt.Sprintf("aws=%s", env.AwsProfile))
 			}
+
+			// Check access status for project-defined envs.
+			if hasProject && env.AwsAccountID != "" && env.AwsProfile == "" {
+				parts = append(parts, "(missing aws_profile)")
+				needsSetup = append(needsSetup, name)
+			}
+
 			rows = append(rows, strings.Join(parts, "  "))
 		}
 
 		for _, row := range rows {
 			fmt.Println(row)
 		}
+
+		if len(needsSetup) > 0 {
+			fmt.Printf("\nHint: %d environment(s) need access configuration.\n", len(needsSetup))
+			fmt.Println("Run 'kest config autoconfigure' to set up AWS profiles and kube contexts.")
+		}
+
 		return nil
 	},
 }

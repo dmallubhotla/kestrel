@@ -20,9 +20,14 @@ var configAutoconfigureCmd = &cobra.Command{
 	Use:   "autoconfigure",
 	Short: "Auto-discover AWS profiles and kube contexts, map them to kest environments",
 	Long: `Reads AWS profiles from ~/.aws/config and kube contexts from
-~/.kube/config. Select which kube contexts to include as environments, then
-associate each with an AWS profile. Unmatched AWS profiles also become
-environments. The result is written to the global kest config.`,
+~/.kube/config, then maps them to kest environments.
+
+When a project .kestconfig defines environments (with aws_account_id, cluster,
+etc.), autoconfigure matches local AWS profiles and kube contexts to those
+project environments and writes only access fields to the global config.
+
+Without a project config, the full discovery flow runs: select kube contexts
+and AWS profiles, associate them, and write to the global config.`,
 	RunE: runAutoconfigure,
 }
 
@@ -61,6 +66,14 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Found %d kube context(s): %s\n", len(kubeContexts), strings.Join(names, ", "))
 	}
 	fmt.Println()
+
+	// If project config defines environments, use the project-aware flow:
+	// match access fields for each project env and write only those to global.
+	if cfg != nil && cfg.HasProjectEnvs() {
+		return runProjectAwareAutoconfigure(profiles, kubeContexts, kubeErr)
+	}
+
+	// --- Legacy flow: no project environments, full discovery ---
 
 	// Load existing global config to preserve non-environment fields.
 	global, err := config.LoadGlobal()
@@ -295,6 +308,212 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 			}
 			toWrite = edited
 			continue // loop back to show updated preview
+		case choiceWrite:
+			// fall through
+		}
+		break
+	}
+
+	if err := config.WriteGlobal(toWrite); err != nil {
+		return err
+	}
+	fmt.Printf("\nConfig written to %s\n", config.GlobalConfigPath())
+	return nil
+}
+
+// runProjectAwareAutoconfigure handles autoconfigure when the project
+// .kestconfig defines environments. For each project env, it matches
+// AWS profiles (by account ID) and kube contexts (by cluster name),
+// then writes only access fields to the global config.
+func runProjectAwareAutoconfigure(profiles []awsconfig.Profile, kubeContexts []kubeconfig.Context, kubeErr error) error {
+	fmt.Println("Project environments detected — matching access credentials.")
+	fmt.Println()
+
+	// Load existing global config to preserve non-environment fields.
+	global, err := config.LoadGlobal()
+	if err != nil {
+		global = &config.Config{}
+	}
+	if global.Environments == nil {
+		global.Environments = make(map[string]config.EnvConfig)
+	}
+
+	// Iterate over project-defined environments in sorted order.
+	envNames := sortedEnvNames(cfg)
+	for _, name := range envNames {
+		projEnv := cfg.ProjectEnvs[name]
+		existing := global.Environments[name]
+
+		fmt.Printf("Environment: %s", name)
+		if projEnv.AwsAccountID != "" {
+			fmt.Printf("  (account: %s)", projEnv.AwsAccountID)
+		}
+		if projEnv.Cluster != "" {
+			fmt.Printf("  (cluster: %s)", projEnv.Cluster)
+		}
+		fmt.Println()
+
+		// Match AWS profile.
+		if projEnv.AwsAccountID != "" && len(profiles) > 0 {
+			// Auto-match by sso_account_id.
+			bestIdx := -1
+			preselect := 0 // 0 = (none)
+
+			// Check existing config first.
+			if existing.AwsProfile != "" {
+				for i, p := range profiles {
+					if p.Name == existing.AwsProfile {
+						preselect = i + 1
+						break
+					}
+				}
+			}
+
+			if preselect == 0 {
+				// Try account ID matching.
+				for i, p := range profiles {
+					ssoID := profileField(p, "sso_account_id")
+					if ssoID != "" && ssoID == projEnv.AwsAccountID {
+						bestIdx = i
+						break
+					}
+				}
+				if bestIdx >= 0 {
+					preselect = bestIdx + 1
+				}
+			}
+
+			m := singleSelectModel{
+				title:  fmt.Sprintf("AWS profile for [%s] (account %s)", name, projEnv.AwsAccountID),
+				cursor: preselect,
+			}
+			m.items = make([]selectItem, 0, len(profiles)+1)
+			m.items = append(m.items, selectItem{name: "(none)"})
+			for _, p := range profiles {
+				m.items = append(m.items, selectItem{
+					name:    p.Name,
+					preview: formatProfilePreview(p),
+				})
+			}
+
+			result, err := runTUI(m)
+			if err != nil {
+				return err
+			}
+			sm := result.(singleSelectModel)
+			if sm.cancelled {
+				fmt.Println("Cancelled.")
+				return nil
+			}
+
+			if sm.cursor > 0 {
+				existing.AwsProfile = profiles[sm.cursor-1].Name
+				fmt.Printf("  aws_profile: %s\n", existing.AwsProfile)
+			}
+		}
+
+		// Match kube context.
+		if projEnv.Cluster != "" && kubeErr == nil && len(kubeContexts) > 0 {
+			bestIdx := -1
+			preselect := 0
+
+			// Check existing config first.
+			if existing.KubeContext != "" {
+				for i, c := range kubeContexts {
+					if c.Name == existing.KubeContext {
+						preselect = i + 1
+						break
+					}
+				}
+			}
+
+			if preselect == 0 {
+				// Try cluster name matching.
+				clusterLower := strings.ToLower(projEnv.Cluster)
+				for i, c := range kubeContexts {
+					ctxLower := strings.ToLower(c.Name)
+					shortLower := strings.ToLower(kubeconfig.ShortName(c.Name))
+					if shortLower == clusterLower || strings.Contains(ctxLower, clusterLower) {
+						bestIdx = i
+						break
+					}
+				}
+				if bestIdx >= 0 {
+					preselect = bestIdx + 1
+				}
+			}
+
+			m := singleSelectModel{
+				title:  fmt.Sprintf("Kube context for [%s] (cluster %s)", name, projEnv.Cluster),
+				cursor: preselect,
+			}
+			m.items = make([]selectItem, 0, len(kubeContexts)+1)
+			m.items = append(m.items, selectItem{name: "(none)"})
+			for _, c := range kubeContexts {
+				m.items = append(m.items, selectItem{
+					name:    c.Name,
+					preview: formatContextPreview(c),
+				})
+			}
+
+			result, err := runTUI(m)
+			if err != nil {
+				return err
+			}
+			sm := result.(singleSelectModel)
+			if sm.cancelled {
+				fmt.Println("Cancelled.")
+				return nil
+			}
+
+			if sm.cursor > 0 {
+				existing.KubeContext = kubeContexts[sm.cursor-1].Name
+				fmt.Printf("  kube_context: %s\n", existing.KubeContext)
+			}
+		}
+
+		global.Environments[name] = existing
+	}
+
+	// Strip any infra fields from global config — only access fields belong there.
+	for name, env := range global.Environments {
+		global.Environments[name] = config.EnvConfig{
+			AwsProfile:  env.AwsProfile,
+			KubeContext: env.KubeContext,
+		}
+	}
+
+	toWrite := global
+
+	for {
+		fmt.Println("\nProposed global config (access fields only):")
+		fmt.Println(strings.Repeat("─", 40))
+		out, _ := yaml.Marshal(toWrite)
+		fmt.Print(string(out))
+		fmt.Println(strings.Repeat("─", 40))
+
+		cm := confirmModel{}
+		result, err := runTUI(cm)
+		if err != nil {
+			return err
+		}
+		choice := result.(confirmModel).choice
+
+		switch choice {
+		case choiceCancel:
+			fmt.Println("Cancelled.")
+			return nil
+		case choiceEdit:
+			edited, err := editInEditor(toWrite)
+			if err != nil {
+				return err
+			}
+			if edited == nil {
+				fmt.Println("Editor returned empty file, keeping previous version.")
+				continue
+			}
+			toWrite = edited
+			continue
 		case choiceWrite:
 			// fall through
 		}

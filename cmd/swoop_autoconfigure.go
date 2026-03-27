@@ -29,7 +29,8 @@ and creates environment entries for each env directory found.
 For centralized IaC repos, creates environment entries for each top-level
 account profile directory.
 
-Existing environments from global config are reused when they match.
+Infrastructure fields (aws_account_id) are written to the project .kestconfig.
+Access fields (aws_profile) are written to the global user config.
 Use --force to overwrite existing environment mappings.`,
 	RunE: runSwoopAutoconfigure,
 }
@@ -87,10 +88,18 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nFound %d AWS profile(s): %s\n", len(awsProfiles), strings.Join(names, ", "))
 	}
 
-	// Step 4: Build environment map.
-	// Start from global config environments as a base — service repos should
-	// reuse the globally configured environments.
-	envMap := make(map[string]config.EnvConfig)
+	// Step 4: Build environment maps — infra fields for project, access fields for global.
+	projectEnvMap := make(map[string]config.EnvConfig) // infra: aws_account_id, region, cluster
+	globalEnvMap := make(map[string]config.EnvConfig)  // access: aws_profile, kube_context
+
+	// Load existing global config to preserve non-environment fields.
+	global, globalErr := config.LoadGlobal()
+	if globalErr != nil {
+		global = &config.Config{}
+	}
+	if global.Environments == nil {
+		global.Environments = make(map[string]config.EnvConfig)
+	}
 
 	// Collect account IDs across all profile dirs for matching.
 	allAccountIDs := make(map[string][]string) // env name → account IDs
@@ -101,31 +110,39 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, envName := range layout.EnvNames {
-		// Check if this environment already exists in global config.
-		if cfg != nil {
-			if existing, ok := cfg.Environments[envName]; ok {
-				envMap[envName] = existing
-				fmt.Printf("\n  %s → reusing global config (aws: %s)\n", envName, existing.AwsProfile)
-				continue
+		// Build infra fields from discovered account IDs.
+		var projectEnv config.EnvConfig
+		accountIDs := allAccountIDs[envName]
+		// For service repos, fall back to parent profile's account IDs.
+		if layout.Type == "service" && len(accountIDs) == 0 {
+			for _, p := range profiles {
+				if len(p.AccountIDs) > 0 {
+					accountIDs = p.AccountIDs
+					break
+				}
 			}
 		}
+		if len(accountIDs) > 0 {
+			projectEnv.AwsAccountID = accountIDs[0]
+		}
+		projectEnvMap[envName] = projectEnv
 
-		// Try to match to an AWS profile.
+		// Check if user already has access configured for this env.
+		if existingAccess, ok := global.Environments[envName]; ok && existingAccess.AwsProfile != "" && !swoopAutoconfigureForce {
+			globalEnvMap[envName] = config.EnvConfig{
+				AwsProfile:  existingAccess.AwsProfile,
+				KubeContext: existingAccess.KubeContext,
+			}
+			fmt.Printf("\n  %s → reusing global config (aws: %s)\n", envName, existingAccess.AwsProfile)
+			continue
+		}
+
+		// Try to match to an AWS profile for the access layer.
 		var awsProfileName string
 		if len(awsProfiles) > 0 {
-			// Build a synthetic ProfileInfo for matching.
 			pi := swoop.ProfileInfo{
 				Name:       envName,
-				AccountIDs: allAccountIDs[envName],
-			}
-			// Also check parent profile's account IDs for service repos
-			// where the env name (dev) may differ from the discovery profile (misc).
-			if layout.Type == "service" {
-				for _, p := range profiles {
-					if len(p.AccountIDs) > 0 && len(pi.AccountIDs) == 0 {
-						pi.AccountIDs = p.AccountIDs
-					}
-				}
+				AccountIDs: accountIDs,
 			}
 
 			bestIdx := bestAWSProfileMatch(pi, awsProfiles)
@@ -142,17 +159,19 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		envMap[envName] = config.EnvConfig{
-			AwsProfile: awsProfileName,
+		globalEnv := global.Environments[envName]
+		globalEnv.AwsProfile = awsProfileName
+		// Strip any infra fields that may have leaked into global config.
+		globalEnvMap[envName] = config.EnvConfig{
+			AwsProfile:  globalEnv.AwsProfile,
+			KubeContext: globalEnv.KubeContext,
 		}
 	}
 
-	// Step 5: Build proposed config.
+	// Step 5: Build proposed project config (infra fields only).
 	proposed := &config.Config{
-		Environments: envMap,
+		Environments: projectEnvMap,
 	}
-
-	// Set iac_dir for service repos.
 	if layout.Type == "service" {
 		proposed.Terraform = config.TerraformConfig{
 			IACDir: layout.IACDir,
@@ -170,14 +189,27 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 		proposed = mergeAutoconfigureResult(existing, proposed, swoopAutoconfigureForce)
 	}
 
+	// Build proposed global config update (access fields only).
+	globalUpdate := *global
+	for name, env := range globalEnvMap {
+		globalUpdate.Environments[name] = env
+	}
+
 	// Step 6: Preview and confirm.
 	for {
-		fmt.Println("\nProposed .kestconfig:")
+		fmt.Println("\nProposed .kestconfig (infrastructure):")
 		fmt.Println(strings.Repeat("─", 40))
 		out, _ := yaml.Marshal(proposed)
 		fmt.Print(string(out))
 		fmt.Println(strings.Repeat("─", 40))
 		fmt.Printf("Path: %s\n", configPath)
+
+		fmt.Println("\nProposed global config (access):")
+		fmt.Println(strings.Repeat("─", 40))
+		gout, _ := yaml.Marshal(&globalUpdate)
+		fmt.Print(string(gout))
+		fmt.Println(strings.Repeat("─", 40))
+		fmt.Printf("Path: %s\n", config.GlobalConfigPath())
 
 		cm := confirmModel{}
 		result, err := runTUI(cm)
@@ -210,7 +242,12 @@ func runSwoopAutoconfigure(cmd *cobra.Command, args []string) error {
 	if err := config.WriteToPath(proposed, configPath); err != nil {
 		return err
 	}
-	fmt.Printf("\nConfig written to %s\n", configPath)
+	fmt.Printf("\nProject config written to %s\n", configPath)
+
+	if err := config.WriteGlobal(&globalUpdate); err != nil {
+		return err
+	}
+	fmt.Printf("Global config written to %s\n", config.GlobalConfigPath())
 	return nil
 }
 
@@ -240,6 +277,7 @@ func resolveProjectConfigPath(projectRoot string) (string, *config.Config, error
 
 // mergeAutoconfigureResult merges autoconfigure's proposed config into
 // an existing config. Without force, existing environments are preserved.
+// Uses field-level merge so existing fields are not clobbered.
 func mergeAutoconfigureResult(existing, proposed *config.Config, force bool) *config.Config {
 	result := *existing
 
@@ -253,16 +291,12 @@ func mergeAutoconfigureResult(existing, proposed *config.Config, force bool) *co
 	}
 
 	for name, env := range proposed.Environments {
-		if _, exists := result.Environments[name]; exists && !force {
-			continue
+		if ex, exists := result.Environments[name]; exists && !force {
+			// Field-level merge: overlay proposed onto existing.
+			result.Environments[name] = config.MergeEnvField(ex, env)
+		} else {
+			result.Environments[name] = env
 		}
-		// Preserve existing kube_context when only adding aws_profile.
-		if ex, ok := result.Environments[name]; ok {
-			if env.KubeContext == "" && ex.KubeContext != "" {
-				env.KubeContext = ex.KubeContext
-			}
-		}
-		result.Environments[name] = env
 	}
 
 	return &result

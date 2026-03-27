@@ -14,6 +14,13 @@ type Config struct {
 	Terraform    TerraformConfig      `yaml:"terraform,omitempty"`
 	Environments map[string]EnvConfig `yaml:"environments,omitempty"`
 
+	// Raw layers preserved for commands that need source awareness.
+	// ProjectEnvs holds environments from the project .kestconfig (infrastructure facts).
+	// UserEnvs holds environments from the user's global config.yaml (access methods).
+	// Not serialized — populated by Load().
+	ProjectEnvs map[string]EnvConfig `yaml:"-"`
+	UserEnvs    map[string]EnvConfig `yaml:"-"`
+
 	// Sources tracks which config files were loaded (not serialised).
 	Sources Sources `yaml:"-"`
 }
@@ -37,6 +44,12 @@ type TerraformConfig struct {
 }
 
 type EnvConfig struct {
+	// Infrastructure facts (typically from project .kestconfig, safe to commit).
+	AwsAccountID string `yaml:"aws_account_id,omitempty"`
+	Region       string `yaml:"region,omitempty"`
+	Cluster      string `yaml:"cluster,omitempty"`
+
+	// Access methods (typically from user config.yaml, not committed).
 	KubeContext string `yaml:"kube_context,omitempty"`
 	AwsProfile  string `yaml:"aws_profile,omitempty"`
 }
@@ -53,11 +66,15 @@ func GlobalConfigPath() string {
 	return filepath.Join(xdg.ConfigHome, appName, globalFileName)
 }
 
-// Load reads the global XDG config and the project-level .kestconfig,
-// merging them with project-level values taking precedence.
+// Load reads the global XDG config (user access methods) and the project-level
+// .kestconfig (infrastructure facts), composing them into a resolved config.
+//
+// When a project .kestconfig defines environments, those are authoritative —
+// user-only environments are not included. When no project config exists,
+// user environments are used directly (backwards-compatible).
 func Load() (*Config, error) {
 	globalPath := GlobalConfigPath()
-	global, err := loadFile(globalPath)
+	user, err := loadFile(globalPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading global config: %w", err)
 	}
@@ -68,22 +85,22 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("loading project config: %w", err)
 	}
 
-	merged := merge(global, project)
+	out := compose(user, project)
 
 	// Record which files actually existed.
 	if fileExists(globalPath) {
-		merged.Sources.Global = globalPath
+		out.Sources.Global = globalPath
 	}
 	if projectPath != "" && fileExists(projectPath) {
-		merged.Sources.Project = projectPath
+		out.Sources.Project = projectPath
 	}
 
 	// Apply defaults
-	if merged.Helm.Namespace == "" {
-		merged.Helm.Namespace = "app"
+	if out.Helm.Namespace == "" {
+		out.Helm.Namespace = "app"
 	}
 
-	return merged, nil
+	return out, nil
 }
 
 func findProjectConfig() (string, error) {
@@ -129,9 +146,15 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// merge combines global and project configs. Project values override global.
-func merge(global, project *Config) *Config {
-	out := *global
+// compose combines user (global) and project configs into a resolved Config.
+//
+// For Helm/Terraform settings, project values override user (same as before).
+// For environments, project config is authoritative when it defines any:
+// project provides infrastructure facts, user provides access methods,
+// and the resolved env has all fields. When no project environments exist,
+// user environments are used directly (backwards-compatible).
+func compose(user, project *Config) *Config {
+	out := *user
 
 	// Helm: project overrides non-empty fields
 	if project.Helm.Chart != "" {
@@ -155,15 +178,43 @@ func merge(global, project *Config) *Config {
 		out.Terraform.IACDir = project.Terraform.IACDir
 	}
 
-	// Environments: project-level entries override global per-key
-	if out.Environments == nil {
-		out.Environments = make(map[string]EnvConfig)
-	}
-	for k, v := range project.Environments {
-		out.Environments[k] = v
-	}
+	// Preserve raw layers for source-aware commands.
+	out.ProjectEnvs = project.Environments
+	out.UserEnvs = user.Environments
+
+	// Compose environments.
+	out.Environments = composeEnvs(user.Environments, project.Environments)
 
 	return &out
+}
+
+// composeEnvs builds the resolved environment map from user and project layers.
+func composeEnvs(userEnvs, projectEnvs map[string]EnvConfig) map[string]EnvConfig {
+	envs := make(map[string]EnvConfig)
+
+	if len(projectEnvs) > 0 {
+		// Project is authoritative: only project-defined environments are valid.
+		for name, projEnv := range projectEnvs {
+			env := projEnv
+			// Layer in user access config.
+			if userEnv, ok := userEnvs[name]; ok {
+				if userEnv.AwsProfile != "" {
+					env.AwsProfile = userEnv.AwsProfile
+				}
+				if userEnv.KubeContext != "" {
+					env.KubeContext = userEnv.KubeContext
+				}
+			}
+			envs[name] = env
+		}
+	} else {
+		// No project environments — use user config directly (backwards-compatible).
+		for name, userEnv := range userEnvs {
+			envs[name] = userEnv
+		}
+	}
+
+	return envs
 }
 
 const maxBackups = 3
@@ -248,10 +299,47 @@ func LoadGlobal() (*Config, error) {
 }
 
 // ResolveEnv returns the environment config for the given name, or an error.
+// It validates that required access fields are configured when infrastructure
+// fields indicate they should be (e.g. aws_account_id set but aws_profile missing).
 func (c *Config) ResolveEnv(name string) (EnvConfig, error) {
 	env, ok := c.Environments[name]
 	if !ok {
 		return EnvConfig{}, fmt.Errorf("environment %q not configured (check your .kestconfig)", name)
 	}
+
+	// Validate access config when infra fields are present.
+	if env.AwsAccountID != "" && env.AwsProfile == "" {
+		return EnvConfig{}, fmt.Errorf(
+			"environment %q has aws_account_id (%s) but no aws_profile configured\n"+
+				"  Run 'kest config autoconfigure' or add aws_profile for %q to %s",
+			name, env.AwsAccountID, name, GlobalConfigPath())
+	}
+
 	return env, nil
+}
+
+// HasProjectEnvs returns true if the config was loaded with project-level
+// environment definitions (i.e. a .kestconfig with environments).
+func (c *Config) HasProjectEnvs() bool {
+	return len(c.ProjectEnvs) > 0
+}
+
+// MergeEnvField merges a single EnvConfig field-by-field into an existing entry.
+func MergeEnvField(base, overlay EnvConfig) EnvConfig {
+	if overlay.AwsAccountID != "" {
+		base.AwsAccountID = overlay.AwsAccountID
+	}
+	if overlay.Region != "" {
+		base.Region = overlay.Region
+	}
+	if overlay.Cluster != "" {
+		base.Cluster = overlay.Cluster
+	}
+	if overlay.KubeContext != "" {
+		base.KubeContext = overlay.KubeContext
+	}
+	if overlay.AwsProfile != "" {
+		base.AwsProfile = overlay.AwsProfile
+	}
+	return base
 }

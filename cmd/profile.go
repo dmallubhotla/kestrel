@@ -5,6 +5,7 @@ import (
 	"io"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,8 +40,17 @@ var profileCurrentCmd = &cobra.Command{
 			fmt.Printf("  (warning: %v)\n", err)
 			return nil
 		}
+		if envCfg.AwsAccountID != "" {
+			fmt.Printf("aws_account:  %s\n", envCfg.AwsAccountID)
+		}
+		if envCfg.Region != "" {
+			fmt.Printf("region:       %s\n", envCfg.Region)
+		}
+		if envCfg.Cluster != "" {
+			fmt.Printf("cluster:      %s\n", envCfg.Cluster)
+		}
 		if envCfg.AwsProfile != "" {
-			fmt.Printf("aws_profile: %s\n", envCfg.AwsProfile)
+			fmt.Printf("aws_profile:  %s\n", envCfg.AwsProfile)
 		}
 		if envCfg.KubeContext != "" {
 			fmt.Printf("kube_context: %s\n", envCfg.KubeContext)
@@ -115,8 +125,19 @@ Add to your shell rc for automatic activation:
 			return err
 		}
 
+		// Add comments with infra context for readability.
+		if envCfg.AwsAccountID != "" {
+			fmt.Printf("# aws account: %s", envCfg.AwsAccountID)
+			if envCfg.Region != "" {
+				fmt.Printf(" (%s)", envCfg.Region)
+			}
+			fmt.Println()
+		}
 		if envCfg.AwsProfile != "" {
 			fmt.Printf("export AWS_PROFILE=%s\n", shellQuote(envCfg.AwsProfile))
+		}
+		if envCfg.Cluster != "" {
+			fmt.Printf("# cluster: %s\n", envCfg.Cluster)
 		}
 		if envCfg.KubeContext != "" {
 			fmt.Printf("kubectl config use-context %s\n", shellQuote(envCfg.KubeContext))
@@ -209,9 +230,16 @@ func (d envItemDelegate) Render(w io.Writer, m list.Model, index int, item list.
 		marker = "* "
 	}
 
-	var detail string
+	var details []string
+	if i.envCfg.Cluster != "" {
+		details = append(details, i.envCfg.Cluster)
+	}
 	if i.envCfg.AwsProfile != "" {
-		detail = fmt.Sprintf("  (aws: %s)", i.envCfg.AwsProfile)
+		details = append(details, fmt.Sprintf("aws: %s", i.envCfg.AwsProfile))
+	}
+	var detail string
+	if len(details) > 0 {
+		detail = fmt.Sprintf("  (%s)", strings.Join(details, ", "))
 	}
 	line := fmt.Sprintf("%s%s%s%s", cursor, marker, i.name, detail)
 
