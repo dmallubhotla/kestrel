@@ -161,18 +161,28 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 	return ids
 }
 
-// EnrichWithAccountIDs sets the AccountID field on each root using the
-// profile inspection results. Each root gets the first account ID found
-// for its profile directory.
+// EnrichWithAccountIDs sets the AccountID field on each root by scanning
+// the root's own .tf/.hcl files for account IDs. If the root itself has
+// no account IDs, falls back to the profile-level account IDs.
 func EnrichWithAccountIDs(roots []Root, profiles []ProfileInfo) {
-	byName := make(map[string]string) // profile name → first account ID
+	// Build profile-level fallback map.
+	byProfile := make(map[string]string)
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {
-			byName[p.Name] = p.AccountIDs[0]
+			byProfile[p.Name] = p.AccountIDs[0]
 		}
 	}
+
 	for i := range roots {
-		if id, ok := byName[roots[i].Profile]; ok {
+		// Try the root's own directory first.
+		ids := extractAccountIDs(roots[i].AbsPath)
+		if len(ids) > 0 {
+			roots[i].AccountID = ids[0]
+			continue
+		}
+		// Fall back to profile-level (useful for centralized repos where
+		// account IDs are in ancestor dirs, already captured by InspectProfiles).
+		if id, ok := byProfile[roots[i].Profile]; ok {
 			roots[i].AccountID = id
 		}
 	}
