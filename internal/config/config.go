@@ -308,11 +308,22 @@ func (c *Config) ResolveEnv(name string) (EnvConfig, error) {
 	}
 
 	// Validate access config when infra fields are present.
+	// Allow account-ID sharing: if another environment with the same account ID
+	// has a profile configured, this env can resolve via fallback.
 	if env.AwsAccountID != "" && env.AwsProfile == "" {
-		return EnvConfig{}, fmt.Errorf(
-			"environment %q has aws_account_id (%s) but no aws_profile configured\n"+
-				"  Run 'kest config autoconfigure' or add aws_profile for %q to %s",
-			name, env.AwsAccountID, name, GlobalConfigPath())
+		hasSharedProfile := false
+		for _, other := range c.Environments {
+			if other.AwsAccountID == env.AwsAccountID && other.AwsProfile != "" {
+				hasSharedProfile = true
+				break
+			}
+		}
+		if !hasSharedProfile {
+			return EnvConfig{}, fmt.Errorf(
+				"environment %q has aws_account_id (%s) but no aws_profile configured\n"+
+					"  Run 'kest config autoconfigure' or add aws_profile for %q to %s",
+				name, env.AwsAccountID, name, GlobalConfigPath())
+		}
 	}
 
 	return env, nil

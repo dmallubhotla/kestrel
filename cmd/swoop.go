@@ -119,7 +119,7 @@ func sortRoots(roots []swoop.Root, state *swoop.State) {
 
 func printRootTable(roots []swoop.Root, state *swoop.State) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ROOT\tPROFILE\tTF VERSION\tINIT\tLAST ACTIVITY")
+	fmt.Fprintln(w, "ROOT\tPROFILE\tAWS PROFILE\tTF VERSION\tINIT\tLAST ACTIVITY")
 
 	for _, r := range roots {
 		init := "-"
@@ -134,7 +134,12 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 
 		activity := lastActivityStr(state, r.Path)
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.Path, r.Profile, ver, init, activity)
+		aws := swoop.ResolveAWSProfile(r, cfg, environment)
+		if aws == "" {
+			aws = "-"
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Profile, aws, ver, init, activity)
 	}
 	w.Flush()
 

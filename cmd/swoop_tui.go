@@ -206,11 +206,20 @@ func (m swoopTUIModel) viewRootPicker() string {
 				activity = swoopDimStyle.Render(activity)
 			}
 
+			profileTag := r.Profile
+			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" {
+				if aws != r.Profile {
+					profileTag = fmt.Sprintf("%s→%s", r.Profile, aws)
+				} else {
+					profileTag = aws
+				}
+			}
+
 			line := fmt.Sprintf("%s%s %s  [%s]  %s  %s",
 				cursor,
 				init,
 				r.Path,
-				r.Profile,
+				profileTag,
 				ver,
 				activity,
 			)

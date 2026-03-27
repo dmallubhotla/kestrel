@@ -485,6 +485,35 @@ func TestResolveEnv_MissingAccessConfig(t *testing.T) {
 	}
 }
 
+func TestResolveEnv_AccountIDSharing(t *testing.T) {
+	cfg := &Config{
+		Environments: map[string]EnvConfig{
+			"prd":        {AwsAccountID: "593671994769", AwsProfile: "prd-sso"},
+			"ci":         {AwsAccountID: "593671994769"}, // same account, no direct profile
+			"example-prod": {AwsAccountID: "593671994769"}, // same account, no direct profile
+			"dev":        {AwsAccountID: "585912155334"}, // different account, no profile anywhere
+		},
+	}
+
+	// ci shares account with prd which has a profile — should succeed.
+	_, err := cfg.ResolveEnv("ci")
+	if err != nil {
+		t.Fatalf("unexpected error for ci (shared account): %v", err)
+	}
+
+	// example-prod same — should succeed.
+	_, err = cfg.ResolveEnv("example-prod")
+	if err != nil {
+		t.Fatalf("unexpected error for example-prod (shared account): %v", err)
+	}
+
+	// dev has account ID but no profile anywhere for that account — should error.
+	_, err = cfg.ResolveEnv("dev")
+	if err == nil {
+		t.Fatal("expected error for dev (no profile for its account)")
+	}
+}
+
 func TestMergeEnvField(t *testing.T) {
 	base := EnvConfig{
 		AwsAccountID: "111111111111",

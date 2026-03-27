@@ -64,7 +64,7 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Environments: %s\n", strings.Join(layout.EnvNames, ", "))
 
 	// Step 3: Inspect roots for account IDs.
-	profiles := swoop.InspectProfiles(roots)
+	profiles := swoop.InspectProfiles(roots, projectRoot)
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {
 			fmt.Printf("  Account IDs in %s: %s\n", p.Name, strings.Join(p.AccountIDs, ", "))
