@@ -72,7 +72,6 @@ var allowedAccountRe = regexp.MustCompile(`allowed_account_ids\s*=\s*\["(\d{12})
 //	account_id     = "123456789012"
 var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 
-
 // extractAccountIDs scans .tf and .hcl files in a directory for account ID values.
 func extractAccountIDs(dir string) []string {
 	entries, err := os.ReadDir(dir)
