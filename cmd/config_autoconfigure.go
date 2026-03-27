@@ -35,44 +35,31 @@ func init() {
 	configCmd.AddCommand(configAutoconfigureCmd)
 }
 
-// accountGroup groups directories that share the same AWS account ID.
-type accountGroup struct {
-	accountID string
-	dirNames  []string // sorted
-}
-
-// collectAccountIDs gathers unique account IDs from directories and targets.
-func collectAccountIDs() []accountGroup {
-	byAccount := make(map[string][]string)
-
-	// From directories map.
-	for dir, accountID := range cfg.Directories {
-		byAccount[accountID] = append(byAccount[accountID], dir)
-	}
-
-	groups := make([]accountGroup, 0, len(byAccount))
-	for id, dirs := range byAccount {
-		sort.Strings(dirs)
-		groups = append(groups, accountGroup{accountID: id, dirNames: dirs})
-	}
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].dirNames[0] < groups[j].dirNames[0]
-	})
-	return groups
-}
-
-// collectClusters gathers unique cluster names from targets.
-func collectClusters() []string {
+// collectAccountIDsFromProfiles extracts unique sso_account_id values from
+// AWS profiles. This is project-independent — it looks at your ~/.aws/config.
+func collectAccountIDsFromProfiles(profiles []awsconfig.Profile) []string {
 	seen := make(map[string]bool)
-	var clusters []string
-	for _, tc := range cfg.Targets {
-		if tc.Cluster != "" && !seen[tc.Cluster] {
-			seen[tc.Cluster] = true
-			clusters = append(clusters, tc.Cluster)
+	var ids []string
+	for _, p := range profiles {
+		ssoID := profileField(p, "sso_account_id")
+		if ssoID != "" && !seen[ssoID] {
+			seen[ssoID] = true
+			ids = append(ids, ssoID)
 		}
 	}
-	sort.Strings(clusters)
-	return clusters
+	sort.Strings(ids)
+	return ids
+}
+
+// profilesForAccount returns all AWS profiles that have the given sso_account_id.
+func profilesForAccount(profiles []awsconfig.Profile, accountID string) []awsconfig.Profile {
+	var matches []awsconfig.Profile
+	for _, p := range profiles {
+		if profileField(p, "sso_account_id") == accountID {
+			matches = append(matches, p)
+		}
+	}
+	return matches
 }
 
 func runAutoconfigure(cmd *cobra.Command, args []string) error {
@@ -119,21 +106,37 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		global.Contexts = make(map[string]string)
 	}
 
-	// --- AWS profiles: one prompt per account ID ---
-	accountGroups := collectAccountIDs()
-	if len(accountGroups) > 0 && len(profiles) > 0 {
+	// --- AWS profiles: one prompt per unique account ID found in ~/.aws/config ---
+	accountIDs := collectAccountIDsFromProfiles(profiles)
+	if len(accountIDs) > 0 {
 		fmt.Println("Matching AWS profiles to accounts...")
 		fmt.Println()
 
-		for _, grp := range accountGroups {
-			dirList := strings.Join(grp.dirNames, ", ")
-			fmt.Printf("Account %s  (dirs: %s)\n", grp.accountID, dirList)
+		for _, accountID := range accountIDs {
+			matching := profilesForAccount(profiles, accountID)
+			matchNames := make([]string, len(matching))
+			for i, p := range matching {
+				matchNames[i] = p.Name
+			}
 
+			fmt.Printf("Account %s  (profiles: %s)\n", accountID, strings.Join(matchNames, ", "))
+
+			if len(matching) == 1 {
+				// Only one profile for this account — use it automatically.
+				global.Accounts[accountID] = config.AccountConfig{
+					AwsProfile: matching[0].Name,
+				}
+				fmt.Printf("  aws_profile: %s (auto, only match)\n", matching[0].Name)
+				fmt.Println()
+				continue
+			}
+
+			// Multiple profiles for this account — let user pick.
 			preselect := 0
 
-			// Check existing accounts config.
-			if acct, ok := global.Accounts[grp.accountID]; ok && acct.AwsProfile != "" {
-				for i, p := range profiles {
+			// Check existing config.
+			if acct, ok := global.Accounts[accountID]; ok && acct.AwsProfile != "" {
+				for i, p := range matching {
 					if p.Name == acct.AwsProfile {
 						preselect = i + 1
 						break
@@ -141,24 +144,13 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			if preselect == 0 {
-				// Try sso_account_id matching.
-				for i, p := range profiles {
-					ssoID := profileField(p, "sso_account_id")
-					if ssoID != "" && ssoID == grp.accountID {
-						preselect = i + 1
-						break
-					}
-				}
-			}
-
 			m := singleSelectModel{
-				title:  fmt.Sprintf("AWS profile for account %s (%s)", grp.accountID, dirList),
+				title:  fmt.Sprintf("AWS profile for account %s", accountID),
 				cursor: preselect,
 			}
-			m.items = make([]selectItem, 0, len(profiles)+1)
+			m.items = make([]selectItem, 0, len(matching)+1)
 			m.items = append(m.items, selectItem{name: "(none)"})
-			for _, p := range profiles {
+			for _, p := range matching {
 				m.items = append(m.items, selectItem{
 					name:    p.Name,
 					preview: formatProfilePreview(p),
@@ -176,8 +168,8 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 			}
 
 			if sm.cursor > 0 {
-				selectedProfile := profiles[sm.cursor-1].Name
-				global.Accounts[grp.accountID] = config.AccountConfig{
+				selectedProfile := matching[sm.cursor-1].Name
+				global.Accounts[accountID] = config.AccountConfig{
 					AwsProfile: selectedProfile,
 				}
 				fmt.Printf("  aws_profile: %s\n", selectedProfile)
@@ -186,69 +178,51 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// --- Kube contexts: one prompt per unique cluster ---
-	clusters := collectClusters()
-	if len(clusters) > 0 && kubeErr == nil && len(kubeContexts) > 0 {
-		fmt.Println("Matching kube contexts to clusters...")
-		fmt.Println()
-
-		for _, cluster := range clusters {
-			fmt.Printf("Cluster: %s\n", cluster)
-
-			preselect := 0
-
-			// Check existing contexts config.
-			if existingCtx, ok := global.Contexts[cluster]; ok {
-				for i, c := range kubeContexts {
-					if c.Name == existingCtx {
-						preselect = i + 1
-						break
-					}
+	// --- Kube contexts: select which contexts to configure ---
+	if kubeErr == nil && len(kubeContexts) > 0 {
+		// Pre-select contexts that are already configured.
+		preselected := make(map[int]bool)
+		for _, existingCtx := range global.Contexts {
+			for i, c := range kubeContexts {
+				if c.Name == existingCtx {
+					preselected[i] = true
+					break
 				}
 			}
-
-			if preselect == 0 {
-				// Try cluster name matching.
-				clusterLower := strings.ToLower(cluster)
-				for i, c := range kubeContexts {
-					ctxLower := strings.ToLower(c.Name)
-					shortLower := strings.ToLower(kubeconfig.ShortName(c.Name))
-					if shortLower == clusterLower || strings.Contains(ctxLower, clusterLower) {
-						preselect = i + 1
-						break
-					}
-				}
-			}
-
-			m := singleSelectModel{
-				title:  fmt.Sprintf("Kube context for cluster %s", cluster),
-				cursor: preselect,
-			}
-			m.items = make([]selectItem, 0, len(kubeContexts)+1)
-			m.items = append(m.items, selectItem{name: "(none)"})
-			for _, c := range kubeContexts {
-				m.items = append(m.items, selectItem{
-					name:    c.Name,
-					preview: formatContextPreview(c),
-				})
-			}
-
-			result, err := runTUI(m)
-			if err != nil {
-				return err
-			}
-			sm := result.(singleSelectModel)
-			if sm.cancelled {
-				fmt.Println("Cancelled.")
-				return nil
-			}
-
-			if sm.cursor > 0 {
-				global.Contexts[cluster] = kubeContexts[sm.cursor-1].Name
-				fmt.Printf("  kube_context: %s\n", global.Contexts[cluster])
-			}
-			fmt.Println()
 		}
+
+		m := multiSelectModel{
+			title:    "Select kube contexts",
+			items:    make([]selectItem, len(kubeContexts)),
+			selected: preselected,
+		}
+		for i, c := range kubeContexts {
+			m.items[i] = selectItem{
+				name:    kubeconfig.ShortName(c.Name),
+				preview: formatContextPreview(c),
+			}
+		}
+
+		result, err := runTUI(m)
+		if err != nil {
+			return err
+		}
+		ms := result.(multiSelectModel)
+		if ms.cancelled {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+
+		// Build contexts map: short name (cluster) → full context name.
+		global.Contexts = make(map[string]string)
+		for i, c := range kubeContexts {
+			if ms.selected[i] {
+				shortName := kubeconfig.ShortName(c.Name)
+				global.Contexts[shortName] = c.Name
+				fmt.Printf("  %s → %s\n", shortName, c.Name)
+			}
+		}
+		fmt.Println()
 	}
 
 	// Clean config for writing: only accounts and contexts.
@@ -402,6 +376,88 @@ var (
 type selectItem struct {
 	name    string
 	preview string
+}
+
+// ── multi-select model ──
+
+type multiSelectModel struct {
+	title     string
+	items     []selectItem
+	selected  map[int]bool
+	cursor    int
+	cancelled bool
+}
+
+func (m multiSelectModel) Init() tea.Cmd { return nil }
+
+func (m multiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case " ":
+			if m.selected[m.cursor] {
+				delete(m.selected, m.cursor)
+			} else {
+				m.selected[m.cursor] = true
+			}
+		case "a":
+			if len(m.selected) == len(m.items) {
+				m.selected = make(map[int]bool)
+			} else {
+				for i := range m.items {
+					m.selected[i] = true
+				}
+			}
+		case "enter":
+			return m, tea.Quit
+		case "q", "esc", "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m multiSelectModel) View() string {
+	var b strings.Builder
+
+	b.WriteString(acTitleStyle.Render(m.title))
+	b.WriteString("\n\n")
+
+	for i, item := range m.items {
+		cursor := "  "
+		if i == m.cursor {
+			cursor = "> "
+		}
+		check := "[ ] "
+		if m.selected[i] {
+			check = acCheckStyle.Render("[✓]") + " "
+		}
+		name := item.name
+		if i == m.cursor {
+			name = acCursorStyle.Render(name)
+		}
+		fmt.Fprintf(&b, "%s%s%s\n", cursor, check, name)
+	}
+
+	if preview := m.items[m.cursor].preview; preview != "" {
+		b.WriteString(acPreviewHead.Render(fmt.Sprintf("── %s ──", m.items[m.cursor].name)))
+		b.WriteString("\n")
+		b.WriteString(preview)
+	}
+
+	b.WriteString(acHelpStyle.Render("space: toggle · a: all/none · enter: confirm · q: quit"))
+	b.WriteString("\n")
+
+	return b.String()
 }
 
 // ── single-select model ──
