@@ -442,8 +442,8 @@ func TestHasProjectEnvs(t *testing.T) {
 func TestResolveEnv_MissingAccessConfig(t *testing.T) {
 	cfg := &Config{
 		Environments: map[string]EnvConfig{
-			"prod": {AwsAccountID: "222222222222", Region: "us-east-1", Cluster: "eks-prd"},
-			"dev":  {AwsAccountID: "111111111111", AwsProfile: "acme-dev"},
+			"prod":  {AwsAccountID: "222222222222", Region: "us-east-1", Cluster: "eks-prd"},
+			"dev":   {AwsAccountID: "111111111111", AwsProfile: "acme-dev"},
 			"local": {Cluster: "kind-local"}, // no aws_account_id, no profile needed
 		},
 	}
@@ -488,7 +488,7 @@ func TestResolveEnv_MissingAccessConfig(t *testing.T) {
 func TestMergeEnvField(t *testing.T) {
 	base := EnvConfig{
 		AwsAccountID: "111111111111",
-		KubeContext:   "old-ctx",
+		KubeContext:  "old-ctx",
 	}
 	overlay := EnvConfig{
 		KubeContext: "new-ctx",
