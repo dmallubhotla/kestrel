@@ -12,13 +12,13 @@ import (
 
 var execCmd = &cobra.Command{
 	Use:     "exec <command> [args...]",
-	Short:   "Run a command with the active profile's environment",
+	Short:   "Run a command with the active target's environment",
 	GroupID: "deploy",
 	Long: `Executes the given command after configuring the shell environment
-for the active profile:
+for the active target:
 
-  • Sets AWS_PROFILE if the profile defines aws_profile
-  • Switches kubectl context if the profile defines kube_context
+  • Sets AWS_PROFILE if the target's cluster resolves to an AWS account
+  • Switches kubectl context if the target defines a cluster
 
 Use -- to separate kest flags from the wrapped command's flags:
 
@@ -31,28 +31,28 @@ Use -- to separate kest flags from the wrapped command's flags:
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if environment == "" {
-			return fmt.Errorf("no environment: use -e <env> or set a profile with 'kest profile use'")
+			return fmt.Errorf("no target: use -e <target> or set a profile with 'kest profile use'")
 		}
 
-		envCfg, err := cfg.ResolveEnv(environment)
+		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
 			return err
 		}
 
 		// Switch kube context before exec (modifies kubeconfig state).
-		if envCfg.KubeContext != "" {
+		if resolved.KubeContext != "" {
 			if verbose {
-				fmt.Fprintf(os.Stderr, "debug: switching kube context to %s\n", envCfg.KubeContext)
+				fmt.Fprintf(os.Stderr, "debug: switching kube context to %s\n", resolved.KubeContext)
 			}
-			if err := runner.Run("kubectl", "config", "use-context", envCfg.KubeContext); err != nil {
+			if err := runner.Run("kubectl", "config", "use-context", resolved.KubeContext); err != nil {
 				return fmt.Errorf("failed to switch kube context: %w", err)
 			}
 		}
 
 		// Build environment with AWS_PROFILE injected.
 		environ := os.Environ()
-		if envCfg.AwsProfile != "" {
-			environ = append(environ, "AWS_PROFILE="+envCfg.AwsProfile)
+		if resolved.AwsProfile != "" {
+			environ = append(environ, "AWS_PROFILE="+resolved.AwsProfile)
 		}
 
 		// Resolve the binary path and exec (replaces this process).

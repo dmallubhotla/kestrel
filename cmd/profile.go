@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -17,77 +16,63 @@ import (
 
 var profileCmd = &cobra.Command{
 	Use:     "profile",
-	Short:   "Manage the active kest environment profile",
+	Short:   "Manage the active kest target profile",
 	GroupID: "config",
 }
 
 var profileCurrentCmd = &cobra.Command{
 	Use:   "current",
-	Short: "Show the active environment profile",
+	Short: "Show the active target profile",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := profile.Read()
+		target, err := profile.Read()
 		if err != nil {
 			return err
 		}
-		if env == "" {
-			fmt.Println("No active profile set. Use 'kest profile use' or 'kest profile set <env>'.")
+		if target == "" {
+			fmt.Println("No active profile set. Use 'kest profile use' or 'kest profile set <target>'.")
 			return nil
 		}
 
-		fmt.Printf("environment: %s\n", env)
-		envCfg, err := cfg.ResolveEnv(env)
+		fmt.Printf("target: %s\n", target)
+		resolved, err := cfg.ResolveTarget(target)
 		if err != nil {
 			fmt.Printf("  (warning: %v)\n", err)
 			return nil
 		}
-		if envCfg.AwsAccountID != "" {
-			fmt.Printf("aws_account:  %s\n", envCfg.AwsAccountID)
+		if resolved.KubeContext != "" {
+			fmt.Printf("kube_context: %s\n", resolved.KubeContext)
 		}
-		if envCfg.Region != "" {
-			fmt.Printf("region:       %s\n", envCfg.Region)
-		}
-		if envCfg.Cluster != "" {
-			fmt.Printf("cluster:      %s\n", envCfg.Cluster)
-		}
-		if envCfg.AwsProfile != "" {
-			fmt.Printf("aws_profile:  %s\n", envCfg.AwsProfile)
-		}
-		if envCfg.KubeContext != "" {
-			fmt.Printf("kube_context: %s\n", envCfg.KubeContext)
+		if resolved.AwsProfile != "" {
+			fmt.Printf("aws_profile:  %s\n", resolved.AwsProfile)
 		}
 		return nil
 	},
 }
 
 var profileSetCmd = &cobra.Command{
-	Use:   "set <environment>",
-	Short: "Set the active environment profile (non-interactive)",
+	Use:   "set <target>",
+	Short: "Set the active target profile (non-interactive)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		env := args[0]
-		if _, err := cfg.ResolveEnv(env); err != nil {
+		target := args[0]
+		if _, err := cfg.ResolveTarget(target); err != nil {
 			return err
 		}
-		if err := profile.Write(env); err != nil {
+		if err := profile.Write(target); err != nil {
 			return err
 		}
-		fmt.Printf("Active profile set to %q\n", env)
+		fmt.Printf("Active profile set to %q\n", target)
 		return nil
 	},
 }
 
 // safeShellValue matches strings that are safe to use unquoted in shell.
-// Only alphanumerics, hyphens, underscores, dots, colons, and slashes.
 var safeShellValue = regexp.MustCompile(`^[a-zA-Z0-9._:/@-]+$`)
 
-// shellQuote returns the value single-quoted for safe shell interpolation,
-// or as-is if it contains only safe characters.
 func shellQuote(s string) string {
 	if safeShellValue.MatchString(s) {
 		return s
 	}
-	// Single-quote the value, escaping any embedded single quotes.
-	// In shell: 'it'\''s' → it's
 	quoted := "'"
 	for _, c := range s {
 		if c == '\'' {
@@ -112,35 +97,24 @@ Add to your shell rc for automatic activation:
   # ~/.bashrc or ~/.zshrc
   eval "$(kest profile export)"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := profile.Read()
+		target, err := profile.Read()
 		if err != nil {
 			return err
 		}
-		if env == "" {
+		if target == "" {
 			return fmt.Errorf("no active profile set — use 'kest profile use' first")
 		}
 
-		envCfg, err := cfg.ResolveEnv(env)
+		resolved, err := cfg.ResolveTarget(target)
 		if err != nil {
 			return err
 		}
 
-		// Add comments with infra context for readability.
-		if envCfg.AwsAccountID != "" {
-			fmt.Printf("# aws account: %s", envCfg.AwsAccountID)
-			if envCfg.Region != "" {
-				fmt.Printf(" (%s)", envCfg.Region)
-			}
-			fmt.Println()
+		if resolved.AwsProfile != "" {
+			fmt.Printf("export AWS_PROFILE=%s\n", shellQuote(resolved.AwsProfile))
 		}
-		if envCfg.AwsProfile != "" {
-			fmt.Printf("export AWS_PROFILE=%s\n", shellQuote(envCfg.AwsProfile))
-		}
-		if envCfg.Cluster != "" {
-			fmt.Printf("# cluster: %s\n", envCfg.Cluster)
-		}
-		if envCfg.KubeContext != "" {
-			fmt.Printf("kubectl config use-context %s\n", shellQuote(envCfg.KubeContext))
+		if resolved.KubeContext != "" {
+			fmt.Printf("kubectl config use-context %s\n", shellQuote(resolved.KubeContext))
 		}
 		return nil
 	},
@@ -148,28 +122,28 @@ Add to your shell rc for automatic activation:
 
 var profileUseCmd = &cobra.Command{
 	Use:   "use",
-	Short: "Interactively select an environment profile",
+	Short: "Interactively select a target profile",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		envNames := sortedEnvNames(cfg)
-		if len(envNames) == 0 {
-			return fmt.Errorf("no environments configured in .kestconfig")
+		targetNames := cfg.TargetNames()
+		if len(targetNames) == 0 {
+			return fmt.Errorf("no targets configured in .kestconfig")
 		}
 
 		current, _ := profile.Read()
 
-		items := make([]list.Item, len(envNames))
+		items := make([]list.Item, len(targetNames))
 		initialIdx := 0
-		for i, name := range envNames {
-			ec := cfg.Environments[name]
-			items[i] = envItem{name: name, envCfg: ec, active: name == current}
+		for i, name := range targetNames {
+			tc := cfg.Targets[name]
+			items[i] = targetItem{name: name, target: tc, cfg: cfg, active: name == current}
 			if name == current {
 				initialIdx = i
 			}
 		}
 
-		delegate := envItemDelegate{}
+		delegate := targetItemDelegate{}
 		l := list.New(items, delegate, 40, min(len(items)+6, 20))
-		l.Title = "Select environment"
+		l.Title = "Select target"
 		l.SetShowStatusBar(false)
 		l.SetFilteringEnabled(false)
 		l.Select(initialIdx)
@@ -195,32 +169,24 @@ var profileUseCmd = &cobra.Command{
 	},
 }
 
-func sortedEnvNames(cfg *config.Config) []string {
-	names := make([]string, 0, len(cfg.Environments))
-	for k := range cfg.Environments {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // --- bubbletea model ---
 
-type envItem struct {
+type targetItem struct {
 	name   string
-	envCfg config.EnvConfig
+	target config.TargetConfig
+	cfg    *config.Config
 	active bool
 }
 
-func (i envItem) FilterValue() string { return i.name }
+func (i targetItem) FilterValue() string { return i.name }
 
-type envItemDelegate struct{}
+type targetItemDelegate struct{}
 
-func (d envItemDelegate) Height() int                             { return 1 }
-func (d envItemDelegate) Spacing() int                            { return 0 }
-func (d envItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
-func (d envItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	i := item.(envItem)
+func (d targetItemDelegate) Height() int                             { return 1 }
+func (d targetItemDelegate) Spacing() int                            { return 0 }
+func (d targetItemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d targetItemDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	i := item.(targetItem)
 	cursor := "  "
 	if index == m.Index() {
 		cursor = "> "
@@ -231,11 +197,11 @@ func (d envItemDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	}
 
 	var details []string
-	if i.envCfg.Cluster != "" {
-		details = append(details, i.envCfg.Cluster)
+	if i.target.Cluster != "" {
+		details = append(details, i.target.Cluster)
 	}
-	if i.envCfg.AwsProfile != "" {
-		details = append(details, fmt.Sprintf("aws: %s", i.envCfg.AwsProfile))
+	if resolved, err := i.cfg.ResolveTarget(i.name); err == nil && resolved.AwsProfile != "" {
+		details = append(details, fmt.Sprintf("aws: %s", resolved.AwsProfile))
 	}
 	var detail string
 	if len(details) > 0 {
@@ -262,7 +228,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			if item, ok := m.list.SelectedItem().(envItem); ok {
+			if item, ok := m.list.SelectedItem().(targetItem); ok {
 				m.choice = item.name
 			}
 			return m, tea.Quit

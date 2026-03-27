@@ -72,6 +72,11 @@ var allowedAccountRe = regexp.MustCompile(`allowed_account_ids\s*=\s*\["(\d{12})
 //	account_id     = "123456789012"
 var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 
+// roleArnAccountRe matches account IDs in IAM role ARNs:
+//
+//	role_arn = "arn:aws:iam::123456789012:role/tf-runner"
+var roleArnAccountRe = regexp.MustCompile(`arn:aws:iam::(\d{12}):`)
+
 // extractAccountIDs scans .tf and .hcl files in a directory for account ID values.
 func extractAccountIDs(dir string) []string {
 	entries, err := os.ReadDir(dir)
@@ -147,8 +152,30 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 				ids = append(ids, m[1])
 			}
 		}
+		if m := roleArnAccountRe.FindStringSubmatch(line); len(m) > 1 {
+			if !contains(ids, m[1]) {
+				ids = append(ids, m[1])
+			}
+		}
 	}
 	return ids
+}
+
+// EnrichWithAccountIDs sets the AccountID field on each root using the
+// profile inspection results. Each root gets the first account ID found
+// for its profile directory.
+func EnrichWithAccountIDs(roots []Root, profiles []ProfileInfo) {
+	byName := make(map[string]string) // profile name → first account ID
+	for _, p := range profiles {
+		if len(p.AccountIDs) > 0 {
+			byName[p.Name] = p.AccountIDs[0]
+		}
+	}
+	for i := range roots {
+		if id, ok := byName[roots[i].Profile]; ok {
+			roots[i].AccountID = id
+		}
+	}
 }
 
 func contains(ss []string, s string) bool {

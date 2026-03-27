@@ -15,11 +15,17 @@ var deploymentCmd = &cobra.Command{
 
 var deploymentInfoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "Show deployment status across all configured environments",
+	Short: "Show deployment status across all configured targets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		for envName, envCfg := range cfg.Environments {
-			fmt.Printf("env: %s\n", envName)
-			if err := helm.List(cfg, envCfg); err != nil {
+		for _, name := range cfg.TargetNames() {
+			fmt.Printf("target: %s\n", name)
+			resolved, err := cfg.ResolveTarget(name)
+			if err != nil {
+				fmt.Printf("  (could not resolve: %v)\n", err)
+				fmt.Println()
+				continue
+			}
+			if err := helm.List(cfg, resolved); err != nil {
 				fmt.Printf("  (could not retrieve info: %v)\n", err)
 			}
 			fmt.Println()

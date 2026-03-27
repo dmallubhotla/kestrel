@@ -92,9 +92,9 @@ func runSwoopActionCmd(action, target string) error {
 		return err
 	}
 
-	roots, err := swoop.Discover(baseDir)
+	roots, err := discoverRoots(baseDir)
 	if err != nil {
-		return fmt.Errorf("discovering roots: %w", err)
+		return err
 	}
 	if len(roots) == 0 {
 		return fmt.Errorf("no terraform roots found under %s", baseDir)
@@ -166,9 +166,9 @@ func runSwoopAction(action, target string) error {
 		return err
 	}
 
-	roots, err := swoop.Discover(baseDir)
+	roots, err := discoverRoots(baseDir)
 	if err != nil {
-		return fmt.Errorf("discovering roots: %w", err)
+		return err
 	}
 	if len(roots) == 0 {
 		return fmt.Errorf("no terraform roots found under %s", baseDir)

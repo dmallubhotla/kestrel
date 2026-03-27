@@ -10,19 +10,37 @@ import (
 )
 
 type Config struct {
-	Helm         HelmConfig           `yaml:"helm,omitempty"`
-	Terraform    TerraformConfig      `yaml:"terraform,omitempty"`
-	Environments map[string]EnvConfig `yaml:"environments,omitempty"`
+	Helm      HelmConfig      `yaml:"helm,omitempty"`
+	Terraform TerraformConfig `yaml:"terraform,omitempty"`
 
-	// Raw layers preserved for commands that need source awareness.
-	// ProjectEnvs holds environments from the project .kestconfig (infrastructure facts).
-	// UserEnvs holds environments from the user's global config.yaml (access methods).
-	// Not serialized — populated by Load().
-	ProjectEnvs map[string]EnvConfig `yaml:"-"`
-	UserEnvs    map[string]EnvConfig `yaml:"-"`
+	// Targets are named deployment targets for helm (project config, committed).
+	// Each maps a name (= values file) to a cluster.
+	Targets map[string]TargetConfig `yaml:"targets,omitempty"`
 
-	// Sources tracks which config files were loaded (not serialised).
-	Sources Sources `yaml:"-"`
+	// Accounts maps AWS account IDs to access credentials (user config).
+	Accounts map[string]AccountConfig `yaml:"accounts,omitempty"`
+
+	// Contexts maps cluster names to kube context strings (user config).
+	// If empty, cluster names are matched against kubeconfig at autoconfigure time.
+	Contexts map[string]string `yaml:"contexts,omitempty"`
+
+	// Directories maps top-level directory names to AWS account IDs (project config).
+	// Used for centralized IaC repos where auto-discovery might miss some dirs.
+	Directories map[string]string `yaml:"directories,omitempty"`
+
+	// Raw layers preserved for source-aware commands (not serialised).
+	ProjectTargets map[string]TargetConfig `yaml:"-"`
+	Sources        Sources                 `yaml:"-"`
+}
+
+// TargetConfig defines a deployment target in project config.
+type TargetConfig struct {
+	Cluster string `yaml:"cluster,omitempty"`
+}
+
+// AccountConfig maps an AWS account ID to access credentials.
+type AccountConfig struct {
+	AwsProfile string `yaml:"aws_profile,omitempty"`
 }
 
 // Sources records the file paths that contributed to the loaded config.
@@ -43,15 +61,10 @@ type TerraformConfig struct {
 	IACDir string `yaml:"iac_dir,omitempty"`
 }
 
-type EnvConfig struct {
-	// Infrastructure facts (typically from project .kestconfig, safe to commit).
-	AwsAccountID string `yaml:"aws_account_id,omitempty"`
-	Region       string `yaml:"region,omitempty"`
-	Cluster      string `yaml:"cluster,omitempty"`
-
-	// Access methods (typically from user config.yaml, not committed).
-	KubeContext string `yaml:"kube_context,omitempty"`
-	AwsProfile  string `yaml:"aws_profile,omitempty"`
+// ResolvedTarget holds the resolved access methods for a target.
+type ResolvedTarget struct {
+	KubeContext string
+	AwsProfile  string
 }
 
 const (
@@ -68,10 +81,6 @@ func GlobalConfigPath() string {
 
 // Load reads the global XDG config (user access methods) and the project-level
 // .kestconfig (infrastructure facts), composing them into a resolved config.
-//
-// When a project .kestconfig defines environments, those are authoritative —
-// user-only environments are not included. When no project config exists,
-// user environments are used directly (backwards-compatible).
 func Load() (*Config, error) {
 	globalPath := GlobalConfigPath()
 	user, err := loadFile(globalPath)
@@ -148,11 +157,8 @@ func fileExists(path string) bool {
 
 // compose combines user (global) and project configs into a resolved Config.
 //
-// For Helm/Terraform settings, project values override user (same as before).
-// For environments, project config is authoritative when it defines any:
-// project provides infrastructure facts, user provides access methods,
-// and the resolved env has all fields. When no project environments exist,
-// user environments are used directly (backwards-compatible).
+// Project provides: targets, directories, helm, terraform settings.
+// User provides: accounts, contexts.
 func compose(user, project *Config) *Config {
 	out := *user
 
@@ -178,43 +184,130 @@ func compose(user, project *Config) *Config {
 		out.Terraform.IACDir = project.Terraform.IACDir
 	}
 
-	// Preserve raw layers for source-aware commands.
-	out.ProjectEnvs = project.Environments
-	out.UserEnvs = user.Environments
+	// Targets come from project config.
+	if len(project.Targets) > 0 {
+		out.Targets = project.Targets
+	}
+	out.ProjectTargets = project.Targets
 
-	// Compose environments.
-	out.Environments = composeEnvs(user.Environments, project.Environments)
+	// Directories come from project config.
+	if len(project.Directories) > 0 {
+		out.Directories = project.Directories
+	}
+
+	// Accounts and Contexts come from user config (already in out via *user).
 
 	return &out
 }
 
-// composeEnvs builds the resolved environment map from user and project layers.
-func composeEnvs(userEnvs, projectEnvs map[string]EnvConfig) map[string]EnvConfig {
-	envs := make(map[string]EnvConfig)
+// ResolveTarget resolves a target name to kube_context + aws_profile.
+// The target must exist in the Targets map.
+// Kube context is resolved from Contexts map by cluster name.
+// AWS profile is resolved from Accounts map by extracting account ID from the
+// kube context ARN (for EKS contexts).
+func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
+	target, ok := c.Targets[name]
+	if !ok {
+		return ResolvedTarget{}, fmt.Errorf("target %q not configured (check your .kestconfig targets)", name)
+	}
 
-	if len(projectEnvs) > 0 {
-		// Project is authoritative: only project-defined environments are valid.
-		for name, projEnv := range projectEnvs {
-			env := projEnv
-			// Layer in user access config.
-			if userEnv, ok := userEnvs[name]; ok {
-				if userEnv.AwsProfile != "" {
-					env.AwsProfile = userEnv.AwsProfile
-				}
-				if userEnv.KubeContext != "" {
-					env.KubeContext = userEnv.KubeContext
-				}
-			}
-			envs[name] = env
+	var resolved ResolvedTarget
+
+	if target.Cluster != "" {
+		resolved.KubeContext = c.ResolveClusterContext(target.Cluster)
+		if resolved.KubeContext == "" {
+			return ResolvedTarget{}, fmt.Errorf(
+				"target %q has cluster %q but no kube context configured\n"+
+					"  Run 'kest config autoconfigure' or add a contexts entry for %q to %s",
+				name, target.Cluster, target.Cluster, GlobalConfigPath())
 		}
-	} else {
-		// No project environments — use user config directly (backwards-compatible).
-		for name, userEnv := range userEnvs {
-			envs[name] = userEnv
+
+		// Derive AWS profile from the kube context's account ID.
+		if accountID := ExtractAccountIDFromARN(resolved.KubeContext); accountID != "" {
+			resolved.AwsProfile = c.ResolveAccountProfile(accountID)
 		}
 	}
 
-	return envs
+	return resolved, nil
+}
+
+// ResolveAccountProfile resolves an account ID to an AWS profile name.
+func (c *Config) ResolveAccountProfile(accountID string) string {
+	if acct, ok := c.Accounts[accountID]; ok {
+		return acct.AwsProfile
+	}
+	return ""
+}
+
+// ResolveClusterContext resolves a cluster name to a kube context string.
+func (c *Config) ResolveClusterContext(cluster string) string {
+	if ctx, ok := c.Contexts[cluster]; ok {
+		return ctx
+	}
+	return ""
+}
+
+// HasProjectTargets returns true if the config was loaded with project-level
+// target definitions (i.e. a .kestconfig with targets).
+func (c *Config) HasProjectTargets() bool {
+	return len(c.ProjectTargets) > 0
+}
+
+// TargetNames returns a sorted list of target names.
+func (c *Config) TargetNames() []string {
+	return sortedKeys(c.Targets)
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}
+
+// ExtractAccountIDFromARN extracts the AWS account ID from an EKS ARN.
+// e.g. "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" → "585912155334"
+// Returns empty string if the context is not an ARN.
+func ExtractAccountIDFromARN(ctx string) string {
+	// ARN format: arn:partition:service:region:account-id:resource
+	if len(ctx) < 4 || ctx[:4] != "arn:" {
+		return ""
+	}
+	parts := splitN(ctx, ':', 6)
+	if len(parts) < 5 {
+		return ""
+	}
+	accountID := parts[4]
+	if len(accountID) == 12 {
+		return accountID
+	}
+	return ""
+}
+
+func splitN(s string, sep byte, n int) []string {
+	var parts []string
+	for i := 0; i < n-1; i++ {
+		idx := -1
+		for j := 0; j < len(s); j++ {
+			if s[j] == sep {
+				idx = j
+				break
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		parts = append(parts, s[:idx])
+		s = s[idx+1:]
+	}
+	parts = append(parts, s)
+	return parts
 }
 
 const maxBackups = 3
@@ -296,61 +389,4 @@ func LoadFromPath(path string) (*Config, error) {
 // LoadGlobal reads only the global config file (no project merge).
 func LoadGlobal() (*Config, error) {
 	return loadFile(GlobalConfigPath())
-}
-
-// ResolveEnv returns the environment config for the given name, or an error.
-// It validates that required access fields are configured when infrastructure
-// fields indicate they should be (e.g. aws_account_id set but aws_profile missing).
-func (c *Config) ResolveEnv(name string) (EnvConfig, error) {
-	env, ok := c.Environments[name]
-	if !ok {
-		return EnvConfig{}, fmt.Errorf("environment %q not configured (check your .kestconfig)", name)
-	}
-
-	// Validate access config when infra fields are present.
-	// Allow account-ID sharing: if another environment with the same account ID
-	// has a profile configured, this env can resolve via fallback.
-	if env.AwsAccountID != "" && env.AwsProfile == "" {
-		hasSharedProfile := false
-		for _, other := range c.Environments {
-			if other.AwsAccountID == env.AwsAccountID && other.AwsProfile != "" {
-				hasSharedProfile = true
-				break
-			}
-		}
-		if !hasSharedProfile {
-			return EnvConfig{}, fmt.Errorf(
-				"environment %q has aws_account_id (%s) but no aws_profile configured\n"+
-					"  Run 'kest config autoconfigure' or add aws_profile for %q to %s",
-				name, env.AwsAccountID, name, GlobalConfigPath())
-		}
-	}
-
-	return env, nil
-}
-
-// HasProjectEnvs returns true if the config was loaded with project-level
-// environment definitions (i.e. a .kestconfig with environments).
-func (c *Config) HasProjectEnvs() bool {
-	return len(c.ProjectEnvs) > 0
-}
-
-// MergeEnvField merges a single EnvConfig field-by-field into an existing entry.
-func MergeEnvField(base, overlay EnvConfig) EnvConfig {
-	if overlay.AwsAccountID != "" {
-		base.AwsAccountID = overlay.AwsAccountID
-	}
-	if overlay.Region != "" {
-		base.Region = overlay.Region
-	}
-	if overlay.Cluster != "" {
-		base.Cluster = overlay.Cluster
-	}
-	if overlay.KubeContext != "" {
-		base.KubeContext = overlay.KubeContext
-	}
-	if overlay.AwsProfile != "" {
-		base.AwsProfile = overlay.AwsProfile
-	}
-	return base
 }

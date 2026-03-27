@@ -24,13 +24,13 @@ var helmCmd = &cobra.Command{
 
 var helmDeployCmd = &cobra.Command{
 	Use:   "deploy [extra helm args...]",
-	Short: "Deploy the helm chart to an environment",
+	Short: "Deploy the helm chart to a target",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if environment == "" {
 			return fmt.Errorf("--environment (-e) is required")
 		}
 
-		envCfg, err := cfg.ResolveEnv(environment)
+		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ var helmDeployCmd = &cobra.Command{
 		}
 		fmt.Fprintf(os.Stderr, "info: deploying container version: %s\n", tag)
 
-		return helm.Deploy(cfg, environment, envCfg, tag, args)
+		return helm.Deploy(cfg, environment, resolved, tag, args)
 	},
 }
 
@@ -74,11 +74,11 @@ var helmListCmd = &cobra.Command{
 		if environment == "" {
 			return fmt.Errorf("--environment (-e) is required")
 		}
-		envCfg, err := cfg.ResolveEnv(environment)
+		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
 			return err
 		}
-		return helm.List(cfg, envCfg)
+		return helm.List(cfg, resolved)
 	},
 }
 
@@ -89,11 +89,11 @@ var helmUninstallCmd = &cobra.Command{
 		if environment == "" {
 			return fmt.Errorf("--environment (-e) is required")
 		}
-		envCfg, err := cfg.ResolveEnv(environment)
+		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
 			return err
 		}
-		return helm.Uninstall(cfg, envCfg)
+		return helm.Uninstall(cfg, resolved)
 	},
 }
 

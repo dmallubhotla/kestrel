@@ -14,6 +14,10 @@ type Root struct {
 	// For service-embedded IaC this may be the environment name (e.g. "dev").
 	Profile string
 
+	// AccountID is the AWS account ID discovered from terraform files.
+	// Set by EnrichWithAccountIDs after discovery + inspection.
+	AccountID string
+
 	// TFVersion is the terraform version from .terraform-version, if present.
 	TFVersion string
 

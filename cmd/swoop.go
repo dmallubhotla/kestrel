@@ -40,9 +40,9 @@ Use --profile to filter by account profile directory.`,
 			return err
 		}
 
-		roots, err := swoop.Discover(baseDir)
+		roots, err := discoverRoots(baseDir)
 		if err != nil {
-			return fmt.Errorf("discovering roots: %w", err)
+			return err
 		}
 
 		if len(roots) == 0 {
@@ -94,6 +94,19 @@ func resolveBaseDir() (string, error) {
 
 	// Fall back to cwd.
 	return os.Getwd()
+}
+
+// discoverRoots discovers terraform roots and enriches them with account IDs.
+func discoverRoots(baseDir string) ([]swoop.Root, error) {
+	roots, err := swoop.Discover(baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("discovering roots: %w", err)
+	}
+	if len(roots) > 0 {
+		profiles := swoop.InspectProfiles(roots, baseDir)
+		swoop.EnrichWithAccountIDs(roots, profiles)
+	}
+	return roots, nil
 }
 
 func sortRoots(roots []swoop.Root, state *swoop.State) {
@@ -152,9 +165,9 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	roots, err := swoop.Discover(baseDir)
+	roots, err := discoverRoots(baseDir)
 	if err != nil {
-		return fmt.Errorf("discovering roots: %w", err)
+		return err
 	}
 	if len(roots) == 0 {
 		return fmt.Errorf("no terraform roots found under %s", baseDir)

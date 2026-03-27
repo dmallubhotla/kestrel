@@ -20,7 +20,7 @@ func envMap(awsProfile string) map[string]string {
 
 // Deploy runs a helm upgrade --install with the appropriate flags,
 // mirroring the logic from common-helm-deploy.sh.
-func Deploy(cfg *config.Config, env string, envCfg config.EnvConfig, tag string, extraArgs []string) error {
+func Deploy(cfg *config.Config, targetName string, resolved config.ResolvedTarget, tag string, extraArgs []string) error {
 	valuesDir := cfg.Helm.ValuesDir
 
 	args := []string{
@@ -31,19 +31,19 @@ func Deploy(cfg *config.Config, env string, envCfg config.EnvConfig, tag string,
 		"--install",
 		"--history-max", "0",
 		"--timeout", "5m0s",
-		"--kube-context", envCfg.KubeContext,
+		"--kube-context", resolved.KubeContext,
 	}
 
-	// Layer values files: shared.yaml first, then <env>.yaml
+	// Layer values files: shared.yaml first, then <target>.yaml
 	sharedValues := filepath.Join(valuesDir, "shared.yaml")
 	if _, err := os.Stat(sharedValues); err == nil {
 		args = append(args, "--values", sharedValues)
 		fmt.Fprintf(os.Stderr, "info: including %s\n", sharedValues)
 	}
 
-	envValues := filepath.Join(valuesDir, env+".yaml")
+	envValues := filepath.Join(valuesDir, targetName+".yaml")
 	if _, err := os.Stat(envValues); err != nil {
-		return fmt.Errorf("values file not found: %s (environment %q not supported?)", envValues, env)
+		return fmt.Errorf("values file not found: %s (target %q not supported?)", envValues, targetName)
 	}
 	args = append(args, "--values", envValues)
 
@@ -56,35 +56,35 @@ func Deploy(cfg *config.Config, env string, envCfg config.EnvConfig, tag string,
 	// Extra args passed through
 	args = append(args, extraArgs...)
 
-	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", args...)
+	return runner.RunWithEnv(envMap(resolved.AwsProfile), "helm", args...)
 }
 
 // List shows deployment info for a release.
-func List(cfg *config.Config, envCfg config.EnvConfig) error {
-	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", "ls",
-		"--kube-context", envCfg.KubeContext,
+func List(cfg *config.Config, resolved config.ResolvedTarget) error {
+	return runner.RunWithEnv(envMap(resolved.AwsProfile), "helm", "ls",
+		"--kube-context", resolved.KubeContext,
 		"-n", cfg.Helm.Namespace,
 	)
 }
 
 // Uninstall removes a helm release.
-func Uninstall(cfg *config.Config, envCfg config.EnvConfig) error {
-	return runner.RunWithEnv(envMap(envCfg.AwsProfile), "helm", "uninstall",
+func Uninstall(cfg *config.Config, resolved config.ResolvedTarget) error {
+	return runner.RunWithEnv(envMap(resolved.AwsProfile), "helm", "uninstall",
 		"--namespace", cfg.Helm.Namespace,
 		"--wait",
 		"--timeout", "5m0s",
-		"--kube-context", envCfg.KubeContext,
+		"--kube-context", resolved.KubeContext,
 		cfg.Helm.ReleaseName,
 	)
 }
 
 // ResolveTag figures out the image tag to deploy, matching the bash script logic.
-func ResolveTag(env, tagOverride string) (string, error) {
+func ResolveTag(targetName, tagOverride string) (string, error) {
 	if tagOverride != "" {
 		return tagOverride, nil
 	}
 
-	if env == "prod" {
+	if targetName == "prod" {
 		// Use latest git tag
 		tag, err := runner.Output("git", "describe", "--tags", "--abbrev=0")
 		if err != nil {

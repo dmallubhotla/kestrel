@@ -283,6 +283,9 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 	}
 
 	writeField("profile", r.Profile)
+	if r.AccountID != "" {
+		writeField("account", r.AccountID)
+	}
 	if r.TFVersion != "" {
 		writeField("terraform", r.TFVersion)
 	}

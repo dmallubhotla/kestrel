@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/example/kestrel/internal/config"
@@ -57,64 +56,55 @@ var configShowCmd = &cobra.Command{
 	},
 }
 
-var configEnvsCmd = &cobra.Command{
-	Use:   "envs",
-	Short: "List configured environments",
+var configTargetsCmd = &cobra.Command{
+	Use:     "targets",
+	Aliases: []string{"envs"},
+	Short:   "List configured targets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(cfg.Environments) == 0 {
-			fmt.Println("No environments configured.")
+		if len(cfg.Targets) == 0 {
+			fmt.Println("No targets configured.")
 			return nil
 		}
 
-		names := make([]string, 0, len(cfg.Environments))
-		for name := range cfg.Environments {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		hasProject := cfg.HasProjectEnvs()
-		var needsSetup []string
-
-		var rows []string
-		for _, name := range names {
-			env := cfg.Environments[name]
+		targetNames := cfg.TargetNames()
+		for _, name := range targetNames {
+			tc := cfg.Targets[name]
 			parts := []string{name}
 
-			// Show infra fields if project config defines them.
-			if hasProject {
-				if env.AwsAccountID != "" {
-					parts = append(parts, fmt.Sprintf("account=%s", env.AwsAccountID))
+			if tc.Cluster != "" {
+				parts = append(parts, fmt.Sprintf("cluster=%s", tc.Cluster))
+			}
+
+			if resolved, err := cfg.ResolveTarget(name); err == nil {
+				if resolved.KubeContext != "" {
+					parts = append(parts, fmt.Sprintf("context=%s", resolved.KubeContext))
 				}
-				if env.Cluster != "" {
-					parts = append(parts, fmt.Sprintf("cluster=%s", env.Cluster))
+				if resolved.AwsProfile != "" {
+					parts = append(parts, fmt.Sprintf("aws=%s", resolved.AwsProfile))
 				}
+			} else {
+				parts = append(parts, "(not fully configured)")
 			}
 
-			if env.KubeContext != "" {
-				parts = append(parts, fmt.Sprintf("context=%s", env.KubeContext))
-			}
-			if env.AwsProfile != "" {
-				parts = append(parts, fmt.Sprintf("aws=%s", env.AwsProfile))
-			}
-
-			// Check access status for project-defined envs.
-			if hasProject && env.AwsAccountID != "" && env.AwsProfile == "" {
-				parts = append(parts, "(missing aws_profile)")
-				needsSetup = append(needsSetup, name)
-			}
-
-			rows = append(rows, strings.Join(parts, "  "))
+			fmt.Println(strings.Join(parts, "  "))
 		}
 
-		for _, row := range rows {
-			fmt.Println(row)
+		return nil
+	},
+}
+
+var configAccountsCmd = &cobra.Command{
+	Use:   "accounts",
+	Short: "List configured AWS account mappings",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(cfg.Accounts) == 0 {
+			fmt.Println("No accounts configured.")
+			return nil
 		}
 
-		if len(needsSetup) > 0 {
-			fmt.Printf("\nHint: %d environment(s) need access configuration.\n", len(needsSetup))
-			fmt.Println("Run 'kest config autoconfigure' to set up AWS profiles and kube contexts.")
+		for id, acct := range cfg.Accounts {
+			fmt.Printf("%s  aws_profile=%s\n", id, acct.AwsProfile)
 		}
-
 		return nil
 	},
 }
@@ -122,6 +112,7 @@ var configEnvsCmd = &cobra.Command{
 func init() {
 	configCmd.AddCommand(configPathsCmd)
 	configCmd.AddCommand(configShowCmd)
-	configCmd.AddCommand(configEnvsCmd)
+	configCmd.AddCommand(configTargetsCmd)
+	configCmd.AddCommand(configAccountsCmd)
 	rootCmd.AddCommand(configCmd)
 }

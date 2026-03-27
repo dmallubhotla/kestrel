@@ -22,18 +22,16 @@ var swoopSetupCmd = &cobra.Command{
 (service-embedded or centralized), and writes infrastructure facts to .kestconfig.
 
 For service repos (misc/iac/live/{env}/ pattern), sets terraform.iac_dir
-and creates environment entries for each env directory found.
+and creates target entries for each env directory found.
 
-For centralized IaC repos, creates environment entries for each top-level
-account profile directory.
+For centralized IaC repos, creates directory→account mappings.
 
-Infrastructure fields (aws_account_id) are written to the project .kestconfig.
-Use --force to overwrite existing environment mappings.`,
+Use --force to overwrite existing mappings.`,
 	RunE: runSwoopSetup,
 }
 
 func init() {
-	swoopSetupCmd.Flags().BoolVar(&swoopSetupForce, "force", false, "overwrite existing environment mappings in .kestconfig")
+	swoopSetupCmd.Flags().BoolVar(&swoopSetupForce, "force", false, "overwrite existing mappings in .kestconfig")
 	swoopCmd.AddCommand(swoopSetupCmd)
 }
 
@@ -61,7 +59,7 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Println("Detected: centralized IaC layout")
 	}
-	fmt.Printf("Environments: %s\n", strings.Join(layout.EnvNames, ", "))
+	fmt.Printf("Directories: %s\n", strings.Join(layout.EnvNames, ", "))
 
 	// Step 3: Inspect roots for account IDs.
 	profiles := swoop.InspectProfiles(roots, projectRoot)
@@ -72,41 +70,29 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Collect account IDs across all profile dirs.
-	allAccountIDs := make(map[string][]string) // env name → account IDs
+	allAccountIDs := make(map[string]string) // dir name → first account ID
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {
-			allAccountIDs[p.Name] = p.AccountIDs
+			allAccountIDs[p.Name] = p.AccountIDs[0]
 		}
 	}
 
-	// Step 4: Build environment map with infrastructure fields only.
-	projectEnvMap := make(map[string]config.EnvConfig)
+	// Step 4: Build proposed config.
+	proposed := &config.Config{}
 
-	for _, envName := range layout.EnvNames {
-		var projectEnv config.EnvConfig
-		accountIDs := allAccountIDs[envName]
-		// For service repos, fall back to parent profile's account IDs.
-		if layout.Type == "service" && len(accountIDs) == 0 {
-			for _, p := range profiles {
-				if len(p.AccountIDs) > 0 {
-					accountIDs = p.AccountIDs
-					break
-				}
-			}
-		}
-		if len(accountIDs) > 0 {
-			projectEnv.AwsAccountID = accountIDs[0]
-		}
-		projectEnvMap[envName] = projectEnv
-	}
-
-	// Step 5: Build proposed project config (infra fields only).
-	proposed := &config.Config{
-		Environments: projectEnvMap,
-	}
 	if layout.Type == "service" {
-		proposed.Terraform = config.TerraformConfig{
-			IACDir: layout.IACDir,
+		proposed.Terraform = config.TerraformConfig{IACDir: layout.IACDir}
+
+		// Service repos: create targets from env dirs under live/.
+		proposed.Targets = make(map[string]config.TargetConfig)
+		for _, envName := range layout.EnvNames {
+			proposed.Targets[envName] = config.TargetConfig{}
+		}
+	} else {
+		// Centralized repos: create directory→account mappings.
+		proposed.Directories = make(map[string]string)
+		for dirName, accountID := range allAccountIDs {
+			proposed.Directories[dirName] = accountID
 		}
 	}
 
@@ -121,7 +107,7 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		proposed = mergeSetupResult(existing, proposed, swoopSetupForce)
 	}
 
-	// Step 6: Preview and confirm.
+	// Step 5: Preview and confirm.
 	for {
 		fmt.Println("\nProposed .kestconfig:")
 		fmt.Println(strings.Repeat("─", 40))
@@ -169,7 +155,6 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 }
 
 // resolveProjectRoot returns the project root directory.
-// Uses the .kestconfig location if found, otherwise cwd.
 func resolveProjectRoot() (string, error) {
 	if cfg != nil && cfg.Sources.Project != "" {
 		return filepath.Abs(filepath.Dir(cfg.Sources.Project))
@@ -241,9 +226,7 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 	return &result, nil
 }
 
-// mergeSetupResult merges init's proposed config into an existing config.
-// Without force, existing environments are preserved.
-// Uses field-level merge so existing fields are not clobbered.
+// mergeSetupResult merges setup's proposed config into an existing config.
 func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Config {
 	result := *existing
 
@@ -252,16 +235,23 @@ func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Con
 		result.Terraform.IACDir = proposed.Terraform.IACDir
 	}
 
-	if result.Environments == nil {
-		result.Environments = make(map[string]config.EnvConfig)
+	// Merge targets.
+	if result.Targets == nil {
+		result.Targets = make(map[string]config.TargetConfig)
+	}
+	for name, tc := range proposed.Targets {
+		if _, exists := result.Targets[name]; !exists || force {
+			result.Targets[name] = tc
+		}
 	}
 
-	for name, env := range proposed.Environments {
-		if ex, exists := result.Environments[name]; exists && !force {
-			// Field-level merge: overlay proposed onto existing.
-			result.Environments[name] = config.MergeEnvField(ex, env)
-		} else {
-			result.Environments[name] = env
+	// Merge directories.
+	if result.Directories == nil && len(proposed.Directories) > 0 {
+		result.Directories = make(map[string]string)
+	}
+	for name, accountID := range proposed.Directories {
+		if _, exists := result.Directories[name]; !exists || force {
+			result.Directories[name] = accountID
 		}
 	}
 

@@ -6,31 +6,55 @@ import (
 	"github.com/example/kestrel/internal/config"
 )
 
-func TestResolveAWSProfile_MatchesRootProfile(t *testing.T) {
+func TestResolveAWSProfile_DirectoryMapping(t *testing.T) {
 	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"dev": {AwsProfile: "acme-dev"},
-			"prd": {AwsProfile: "acme-prd"},
+		Directories: map[string]string{
+			"prd": "593671994769",
+			"dev": "585912155334",
+		},
+		Accounts: map[string]config.AccountConfig{
+			"593671994769": {AwsProfile: "prd-sso"},
+			"585912155334": {AwsProfile: "dev-sso"},
 		},
 	}
-	root := Root{Profile: "dev"}
+
+	root := Root{Profile: "prd"}
 	got := ResolveAWSProfile(root, cfg, "")
-	if got != "acme-dev" {
-		t.Errorf("got %q, want %q", got, "acme-dev")
+	if got != "prd-sso" {
+		t.Errorf("got %q, want %q", got, "prd-sso")
 	}
 }
 
-func TestResolveAWSProfile_FallsBackToActiveEnv(t *testing.T) {
+func TestResolveAWSProfile_AccountIDOnRoot(t *testing.T) {
 	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"staging": {AwsProfile: "acme-staging"},
+		Accounts: map[string]config.AccountConfig{
+			"585912155334": {AwsProfile: "dev-sso"},
 		},
 	}
-	// Root profile "prd" doesn't match any environment.
-	root := Root{Profile: "prd"}
-	got := ResolveAWSProfile(root, cfg, "staging")
-	if got != "acme-staging" {
-		t.Errorf("got %q, want %q", got, "acme-staging")
+
+	root := Root{Profile: "dev", AccountID: "585912155334"}
+	got := ResolveAWSProfile(root, cfg, "")
+	if got != "dev-sso" {
+		t.Errorf("got %q, want %q", got, "dev-sso")
+	}
+}
+
+func TestResolveAWSProfile_DirectoryOverridesAutoDiscovery(t *testing.T) {
+	cfg := &config.Config{
+		Directories: map[string]string{
+			"global": "593671994769",
+		},
+		Accounts: map[string]config.AccountConfig{
+			"593671994769": {AwsProfile: "prd-sso"},
+			"111111111111": {AwsProfile: "other"},
+		},
+	}
+
+	// Root auto-discovered a different account, but directory mapping wins.
+	root := Root{Profile: "global", AccountID: "111111111111"}
+	got := ResolveAWSProfile(root, cfg, "")
+	if got != "prd-sso" {
+		t.Errorf("got %q, want %q", got, "prd-sso")
 	}
 }
 
@@ -44,8 +68,8 @@ func TestResolveAWSProfile_NilConfig(t *testing.T) {
 
 func TestResolveAWSProfile_NoMatch(t *testing.T) {
 	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"dev": {AwsProfile: "acme-dev"},
+		Accounts: map[string]config.AccountConfig{
+			"585912155334": {AwsProfile: "dev-sso"},
 		},
 	}
 	root := Root{Profile: "unknown"}
@@ -55,91 +79,43 @@ func TestResolveAWSProfile_NoMatch(t *testing.T) {
 	}
 }
 
-func TestResolveAWSProfile_AccountIDFallback(t *testing.T) {
-	// ci and prd share account ID; only prd has a profile configured.
+func TestResolveAWSProfile_FallsBackToActiveTarget(t *testing.T) {
 	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"prd": {AwsAccountID: "593671994769", AwsProfile: "prd-sso"},
-			"ci":  {AwsAccountID: "593671994769"},
+		Targets: map[string]config.TargetConfig{
+			"dev": {Cluster: "eks-dev"},
 		},
-	}
-	root := Root{Profile: "ci"}
-	got := ResolveAWSProfile(root, cfg, "")
-	if got != "prd-sso" {
-		t.Errorf("got %q, want %q", got, "prd-sso")
-	}
-}
-
-func TestResolveAWSProfile_AccountIDFallbackMultipleDirs(t *testing.T) {
-	// Three directories share the same account; only one has a profile.
-	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"prd":        {AwsAccountID: "593671994769", AwsProfile: "prd-sso"},
-			"ci":         {AwsAccountID: "593671994769"},
-			"example-prod": {AwsAccountID: "593671994769"},
-			"dev":        {AwsAccountID: "585912155334", AwsProfile: "dev-sso"},
+		Contexts: map[string]string{
+			"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+		},
+		Accounts: map[string]config.AccountConfig{
+			"585912155334": {AwsProfile: "dev-sso"},
 		},
 	}
 
-	tests := []struct {
-		profile string
-		want    string
-	}{
-		{"ci", "prd-sso"},
-		{"example-prod", "prd-sso"},
-		{"prd", "prd-sso"},
-		{"dev", "dev-sso"},
-	}
-
-	for _, tt := range tests {
-		root := Root{Profile: tt.profile}
-		got := ResolveAWSProfile(root, cfg, "")
-		if got != tt.want {
-			t.Errorf("profile %q: got %q, want %q", tt.profile, got, tt.want)
-		}
-	}
-}
-
-func TestResolveAWSProfile_DirectMatchTakesPrecedence(t *testing.T) {
-	// ci has its own profile despite sharing an account with prd.
-	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"prd": {AwsAccountID: "593671994769", AwsProfile: "prd-sso"},
-			"ci":  {AwsAccountID: "593671994769", AwsProfile: "ci-sso"},
-		},
-	}
-	root := Root{Profile: "ci"}
-	got := ResolveAWSProfile(root, cfg, "")
-	if got != "ci-sso" {
-		t.Errorf("got %q, want %q", got, "ci-sso")
-	}
-}
-
-func TestResolveAWSProfile_AccountIDNoProfileAnywhere(t *testing.T) {
-	// Account ID set but no profile on any env with that account.
-	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"azure": {AwsAccountID: ""},
-			"prd":   {AwsAccountID: "593671994769"},
-		},
-	}
-	root := Root{Profile: "prd"}
-	got := ResolveAWSProfile(root, cfg, "")
-	if got != "" {
-		t.Errorf("got %q, want empty", got)
-	}
-}
-
-func TestResolveAWSProfile_AccountIDFallbackThenActiveEnv(t *testing.T) {
-	// Root profile not in config at all — should fall through to active env.
-	cfg := &config.Config{
-		Environments: map[string]config.EnvConfig{
-			"dev": {AwsAccountID: "585912155334", AwsProfile: "dev-sso"},
-		},
-	}
 	root := Root{Profile: "unknown"}
 	got := ResolveAWSProfile(root, cfg, "dev")
 	if got != "dev-sso" {
 		t.Errorf("got %q, want %q", got, "dev-sso")
+	}
+}
+
+func TestResolveAWSProfile_MultipleDirsSameAccount(t *testing.T) {
+	cfg := &config.Config{
+		Directories: map[string]string{
+			"prd":        "593671994769",
+			"ci":         "593671994769",
+			"example-prod": "593671994769",
+		},
+		Accounts: map[string]config.AccountConfig{
+			"593671994769": {AwsProfile: "prd-sso"},
+		},
+	}
+
+	for _, profile := range []string{"prd", "ci", "example-prod"} {
+		root := Root{Profile: profile}
+		got := ResolveAWSProfile(root, cfg, "")
+		if got != "prd-sso" {
+			t.Errorf("profile %q: got %q, want %q", profile, got, "prd-sso")
+		}
 	}
 }

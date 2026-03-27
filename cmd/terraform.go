@@ -7,19 +7,19 @@ import (
 
 var terraformCmd = &cobra.Command{
 	Use:     "terraform [subcommand] [flags]",
-	Short:   "Run terraform commands in the appropriate environment directory",
+	Short:   "Run terraform commands in the appropriate target directory",
 	GroupID: "deploy",
-	Long:    "Proxies terraform commands into the correct misc/iac/live/<env>/ directory.",
+	Long:    "Proxies terraform commands into the correct misc/iac/live/<target>/ directory.",
 	Args:    cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if environment == "" {
 			return cmd.Help()
 		}
-		envCfg, err := cfg.ResolveEnv(environment)
+		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
 			return err
 		}
-		return terraform.Run(cfg, environment, envCfg, args)
+		return terraform.Run(cfg, environment, resolved, args)
 	},
 	// Don't parse flags after the first positional arg — pass them to terraform.
 	DisableFlagParsing: false,
