@@ -63,13 +63,32 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 
 	// Step 3: Inspect roots for account IDs.
 	profiles := swoop.InspectProfiles(roots, projectRoot)
+	swoop.EnrichWithAccountIDs(roots, profiles)
+
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {
 			fmt.Printf("  Account IDs in %s: %s\n", p.Name, strings.Join(p.AccountIDs, ", "))
 		}
 	}
 
-	// Collect account IDs across all profile dirs.
+	// Build per-root account ID map for service repos.
+	// For service layout, the env dir is the part after "live/" in the root path.
+	rootAccountIDs := make(map[string]string) // env name → account ID
+	for _, r := range roots {
+		if r.AccountID == "" {
+			continue
+		}
+		// For service repos, extract env name from path (e.g., "misc/iac/live/dev" → "dev").
+		envName := layout.EnvNameFromRoot(r)
+		if envName != "" {
+			// Keep first discovered — multiple roots in same env should agree.
+			if _, exists := rootAccountIDs[envName]; !exists {
+				rootAccountIDs[envName] = r.AccountID
+			}
+		}
+	}
+
+	// Collect account IDs across all profile dirs (for centralized repos).
 	allAccountIDs := make(map[string]string) // dir name → first account ID
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {
@@ -87,6 +106,14 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		proposed.Targets = make(map[string]config.TargetConfig)
 		for _, envName := range layout.EnvNames {
 			proposed.Targets[envName] = config.TargetConfig{}
+		}
+
+		// Also create directories map for per-target account IDs.
+		if len(rootAccountIDs) > 0 {
+			proposed.Directories = make(map[string]string)
+			for envName, accountID := range rootAccountIDs {
+				proposed.Directories[envName] = accountID
+			}
 		}
 	} else {
 		// Centralized repos: create directory→account mappings.

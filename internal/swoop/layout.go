@@ -84,6 +84,22 @@ func DetectLayout(roots []Root) Layout {
 	}
 }
 
+// EnvNameFromRoot extracts the environment/target name for a root.
+// For service repos, this is the directory after "live/" in the root path.
+// For centralized repos, this is the top-level profile directory.
+func (l Layout) EnvNameFromRoot(r Root) string {
+	if l.Type == "service" {
+		parts := strings.Split(r.Path, string(filepath.Separator))
+		for i, p := range parts {
+			if p == "live" && i+1 < len(parts) {
+				return parts[i+1]
+			}
+		}
+		return ""
+	}
+	return r.Profile
+}
+
 func sortedKeys(m map[string]bool) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
