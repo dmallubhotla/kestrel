@@ -63,7 +63,7 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 
 	// Step 3: Inspect roots for account IDs.
 	profiles := swoop.InspectProfiles(roots, projectRoot)
-	swoop.EnrichWithAccountIDs(roots, profiles)
+	swoop.EnrichWithAccountIDs(roots, projectRoot)
 
 	for _, p := range profiles {
 		if len(p.AccountIDs) > 0 {

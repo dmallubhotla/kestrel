@@ -155,16 +155,12 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 }
 
 // EnrichWithAccountIDs sets the AccountID field on each root by scanning
-// the root's own .tf/.hcl files for account IDs. If the root itself has
-// no account IDs, falls back to the profile-level account IDs.
-func EnrichWithAccountIDs(roots []Root, profiles []ProfileInfo) {
-	// Build profile-level fallback map.
-	byProfile := make(map[string]string)
-	for _, p := range profiles {
-		if len(p.AccountIDs) > 0 {
-			byProfile[p.Name] = p.AccountIDs[0]
-		}
-	}
+// the root's own .tf/.hcl files first, then walking ancestors up to baseDir.
+// This avoids profile-level fallback which conflates unrelated roots that
+// happen to share a top-level directory (e.g. service repos where all roots
+// are under "misc").
+func EnrichWithAccountIDs(roots []Root, baseDir string) {
+	absBase, _ := filepath.Abs(baseDir)
 
 	for i := range roots {
 		// Try the root's own directory first.
@@ -173,11 +169,13 @@ func EnrichWithAccountIDs(roots []Root, profiles []ProfileInfo) {
 			roots[i].AccountID = ids[0]
 			continue
 		}
-		// Fall back to profile-level (useful for centralized repos where
-		// account IDs are in ancestor dirs, already captured by InspectProfiles).
-		if id, ok := byProfile[roots[i].Profile]; ok {
-			roots[i].AccountID = id
+		// Walk ancestors — useful for centralized repos where account IDs
+		// are in a parent terragrunt.hcl.
+		ancestorIDs := extractAncestorAccountIDs(roots[i].AbsPath, absBase)
+		if len(ancestorIDs) > 0 {
+			roots[i].AccountID = ancestorIDs[0]
 		}
+		// If still nothing, leave empty — the root doesn't need AWS.
 	}
 }
 

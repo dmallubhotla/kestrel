@@ -103,8 +103,7 @@ func discoverRoots(baseDir string) ([]swoop.Root, error) {
 		return nil, fmt.Errorf("discovering roots: %w", err)
 	}
 	if len(roots) > 0 {
-		profiles := swoop.InspectProfiles(roots, baseDir)
-		swoop.EnrichWithAccountIDs(roots, profiles)
+		swoop.EnrichWithAccountIDs(roots, baseDir)
 	}
 	return roots, nil
 }
