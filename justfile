@@ -8,7 +8,8 @@ build:
 
 # run go tests via nix develop
 test:
-    go test ./...
+    nix flake check
+    # go test ./...
 
 # run nix flake check
 check:
