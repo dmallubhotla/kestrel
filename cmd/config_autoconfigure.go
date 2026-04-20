@@ -364,11 +364,11 @@ func runTUI(m tea.Model) (tea.Model, error) {
 
 var (
 	acTitleStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1)
-	acCursorStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	acCheckStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	acPreviewHead = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Padding(1, 0, 0, 2)
-	acPreviewKey  = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).PaddingLeft(4)
-	acHelpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Padding(1, 0, 0, 2)
+	acCursorStyle = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
+	acCheckStyle  = lipgloss.NewStyle().Foreground(colorSuccess)
+	acPreviewHead = lipgloss.NewStyle().Bold(true).Foreground(colorAccent).Padding(1, 0, 0, 2)
+	acPreviewKey  = lipgloss.NewStyle().Foreground(colorKey).PaddingLeft(4)
+	acHelpStyle   = lipgloss.NewStyle().Foreground(colorHelp).Padding(1, 0, 0, 2)
 )
 
 // ── shared item type ──

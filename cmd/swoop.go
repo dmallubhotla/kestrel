@@ -187,7 +187,9 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 		return nil // cancelled
 	}
 
-	fmt.Println() // blank line after TUI clears
+	fmt.Fprintf(os.Stderr, "\n%s\n\n",
+		swoopHelpStyle.Render(
+			fmt.Sprintf("hint: kest swoop %s %s", action.action, action.root.Path)))
 	return runSwoopAction(action.action, action.root.Path)
 }
 

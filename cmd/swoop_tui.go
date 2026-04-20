@@ -184,47 +184,82 @@ func (m swoopTUIModel) viewRootPicker() string {
 			b.WriteString(swoopDimStyle.Render(fmt.Sprintf("  ... %d more above\n", start)))
 		}
 
+		// Pre-compute row data for column width calculation.
+		type tuiRow struct {
+			path, profile, ver, activity string
+			initialized                  bool
+		}
+		rows := make([]tuiRow, end-start)
+		maxPath, maxProfile, maxVer := 0, 0, 0
 		for i := start; i < end; i++ {
 			r := m.filtered[i]
+			row := tuiRow{
+				path:        r.Path,
+				initialized: r.Initialized,
+				ver:         "-",
+				activity:    lastActivityStr(m.state, r.Path),
+			}
+			if r.TFVersion != "" {
+				row.ver = r.TFVersion
+			}
+			row.profile = r.Profile
+			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" {
+				if aws != r.Profile {
+					row.profile = fmt.Sprintf("%s→%s", r.Profile, aws)
+				} else {
+					row.profile = aws
+				}
+			}
+			rows[i-start] = row
+			if len(row.path) > maxPath {
+				maxPath = len(row.path)
+			}
+			tag := fmt.Sprintf("[%s]", row.profile)
+			if len(tag) > maxProfile {
+				maxProfile = len(tag)
+			}
+			if len(row.ver) > maxVer {
+				maxVer = len(row.ver)
+			}
+		}
+
+		for i, row := range rows {
+			idx := start + i
 			cursor := "  "
-			if i == m.cursor {
+			if idx == m.cursor {
 				cursor = "> "
 			}
 
 			init := swoopDimStyle.Render("-")
-			if r.Initialized {
+			if row.initialized {
 				init = swoopGreenStyle.Render("✓")
 			}
 
-			ver := swoopDimStyle.Render("-")
-			if r.TFVersion != "" {
-				ver = r.TFVersion
+			paddedPath := fmt.Sprintf("%-*s", maxPath, row.path)
+			profileTag := fmt.Sprintf("[%s]", row.profile)
+			paddedProfile := fmt.Sprintf("%-*s", maxProfile, profileTag)
+			paddedVer := fmt.Sprintf("%-*s", maxVer, row.ver)
+
+			ver := paddedVer
+			if row.ver == "-" {
+				ver = swoopDimStyle.Render(paddedVer)
 			}
 
-			activity := lastActivityStr(m.state, r.Path)
+			activity := row.activity
 			if activity == "-" {
 				activity = swoopDimStyle.Render(activity)
 			}
 
-			profileTag := r.Profile
-			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" {
-				if aws != r.Profile {
-					profileTag = fmt.Sprintf("%s→%s", r.Profile, aws)
-				} else {
-					profileTag = aws
-				}
-			}
-
-			line := fmt.Sprintf("%s%s %s  [%s]  %s  %s",
+			line := fmt.Sprintf("%s%s %s  %s  %s  %s",
 				cursor,
 				init,
-				r.Path,
-				profileTag,
+				paddedPath,
+				paddedProfile,
 				ver,
 				activity,
 			)
 
-			if i == m.cursor {
+			if idx == m.cursor {
 				line = swoopSelectedStyle.Render(line)
 			}
 			b.WriteString(line + "\n")
@@ -341,15 +376,15 @@ func listWindow(cursor, total, windowSize int) (start, end int) {
 // ── styles ──
 
 var (
-	swoopTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	swoopSelectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	swoopDimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	swoopGreenStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	swoopFilterDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)
-	swoopHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	swoopPreviewHead   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	swoopPreviewKey    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	swoopTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
+	swoopSelectedStyle = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
+	swoopDimStyle      = lipgloss.NewStyle().Foreground(colorDim)
+	swoopGreenStyle    = lipgloss.NewStyle().Foreground(colorSuccess)
+	swoopFilterDim     = lipgloss.NewStyle().Foreground(colorDim).Italic(true)
+	swoopHelpStyle     = lipgloss.NewStyle().Foreground(colorHelp)
+	swoopPreviewHead   = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
+	swoopPreviewKey    = lipgloss.NewStyle().Foreground(colorKey)
 
-	swoopActionActive   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("12")).Padding(0, 1)
-	swoopActionInactive = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Padding(0, 1)
+	swoopActionActive   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(colorAccent).Padding(0, 1)
+	swoopActionInactive = lipgloss.NewStyle().Foreground(colorHelp).Padding(0, 1)
 )
