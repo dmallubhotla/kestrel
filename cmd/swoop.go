@@ -195,6 +195,9 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 
 func init() {
 	swoopListCmd.Flags().StringVar(&swoopProfile, "profile", "", "filter by account profile directory")
+	swoopListCmd.ValidArgsFunction = completeSwoopRoots
+	swoopListCmd.RegisterFlagCompletionFunc("profile", completeSwoopProfiles)
+
 	swoopCmd.AddCommand(swoopListCmd)
 	rootCmd.AddCommand(swoopCmd)
 }

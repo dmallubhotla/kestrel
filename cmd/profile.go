@@ -249,6 +249,8 @@ func (m pickerModel) View() string {
 }
 
 func init() {
+	profileSetCmd.ValidArgsFunction = completeTargetNames
+
 	profileCmd.AddCommand(profileCurrentCmd)
 	profileCmd.AddCommand(profileSetCmd)
 	profileCmd.AddCommand(profileExportCmd)

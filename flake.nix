@@ -47,8 +47,13 @@
           version = "0.1.0";
           src = ./.;
           modules = ./gomod2nix.toml;
+          nativeBuildInputs = [ final.installShellFiles ];
           postInstall = ''
             mv $out/bin/kestrel $out/bin/kest
+            installShellCompletion --cmd kest \
+              --bash <($out/bin/kest completion bash) \
+              --zsh <($out/bin/kest completion zsh) \
+              --fish <($out/bin/kest completion fish)
           '';
         };
       };

@@ -414,6 +414,9 @@ func init() {
 		// Allow --changed without a value (defaults to "true" meaning "use merge-base").
 		c.Flags().Lookup("changed").NoOptDefVal = "true"
 		c.Flags().StringVar(&swoopActionProfile, "profile", "", "filter by account profile directory")
+
+		c.ValidArgsFunction = completeSwoopRoots
+		c.RegisterFlagCompletionFunc("profile", completeSwoopProfiles)
 	}
 
 	swoopApplyCmd.Flags().BoolVar(&swoopForceFromLaptop, "force-from-laptop", false, "bypass the CI-only check for apply")

@@ -84,4 +84,6 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&environment, "environment", "e", "", "target environment (dev, stage, prod)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose/debug output")
+
+	rootCmd.RegisterFlagCompletionFunc("environment", completeTargetNames)
 }
