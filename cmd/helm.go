@@ -35,6 +35,10 @@ var helmDeployCmd = &cobra.Command{
 			return err
 		}
 
+		if err := ensureSSOSession(resolved.AwsProfile); err != nil {
+			return err
+		}
+
 		// Safety checks
 		if !forceFromLaptop {
 			if err := guard.CheckCI(); err != nil {
@@ -78,6 +82,9 @@ var helmListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := ensureSSOSession(resolved.AwsProfile); err != nil {
+			return err
+		}
 		return helm.List(cfg, resolved)
 	},
 }
@@ -91,6 +98,9 @@ var helmUninstallCmd = &cobra.Command{
 		}
 		resolved, err := cfg.ResolveTarget(environment)
 		if err != nil {
+			return err
+		}
+		if err := ensureSSOSession(resolved.AwsProfile); err != nil {
 			return err
 		}
 		return helm.Uninstall(cfg, resolved)

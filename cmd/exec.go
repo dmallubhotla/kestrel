@@ -39,6 +39,10 @@ Use -- to separate kest flags from the wrapped command's flags:
 			return err
 		}
 
+		if err := ensureSSOSession(resolved.AwsProfile); err != nil {
+			return err
+		}
+
 		// Switch kube context before exec (modifies kubeconfig state).
 		if resolved.KubeContext != "" {
 			if verbose {

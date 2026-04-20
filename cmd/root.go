@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/example/kestrel/internal/awslogin"
 	"github.com/example/kestrel/internal/config"
 	"github.com/example/kestrel/internal/guard"
 	"github.com/example/kestrel/internal/logging"
@@ -58,6 +59,15 @@ var rootCmd = &cobra.Command{
 			logCleanup()
 		}
 	},
+}
+
+// ensureSSOSession checks the AWS session for the given profile and runs
+// sso login if needed. No-op when auto_sso_login is off or running in CI.
+func ensureSSOSession(profile string) error {
+	if cfg == nil || !cfg.AutoSSOLogin || guard.IsCI() {
+		return nil
+	}
+	return awslogin.EnsureSession(profile)
 }
 
 func Execute() {

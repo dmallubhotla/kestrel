@@ -197,6 +197,10 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	// Resolve AWS_PROFILE.
 	awsProfile := swoop.ResolveAWSProfile(root, cfg, environment)
 
+	if err := ensureSSOSession(awsProfile); err != nil {
+		return err
+	}
+
 	// tfenv preflight check.
 	if err := handleTFVersionCheck(root); err != nil {
 		return err
@@ -283,6 +287,18 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Running terraform %s on %d root(s)...\n\n", action, len(roots))
+
+	// Check SSO sessions once per unique profile before starting the batch.
+	checkedProfiles := map[string]bool{}
+	for _, root := range roots {
+		p := swoop.ResolveAWSProfile(root, cfg, environment)
+		if p != "" && !checkedProfiles[p] {
+			if err := ensureSSOSession(p); err != nil {
+				return err
+			}
+			checkedProfiles[p] = true
+		}
+	}
 
 	results := make([]batchResult, len(roots))
 

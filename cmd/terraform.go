@@ -19,6 +19,9 @@ var terraformCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := ensureSSOSession(resolved.AwsProfile); err != nil {
+			return err
+		}
 		return terraform.Run(cfg, environment, resolved, args)
 	},
 	// Don't parse flags after the first positional arg — pass them to terraform.

@@ -28,6 +28,9 @@ type Config struct {
 	// Used for centralized IaC repos where auto-discovery might miss some dirs.
 	Directories map[string]string `yaml:"directories,omitempty"`
 
+	// AutoSSOLogin enables automatic aws sso login when a session is expired (user config).
+	AutoSSOLogin bool `yaml:"auto_sso_login,omitempty"`
+
 	// Raw layers preserved for source-aware commands (not serialised).
 	ProjectTargets map[string]TargetConfig `yaml:"-"`
 	Sources        Sources                 `yaml:"-"`
