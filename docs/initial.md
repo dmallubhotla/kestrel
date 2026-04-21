@@ -46,7 +46,7 @@ debug: using misc/chart...
 error: not in CI environment, no deploys!
 <error: cannot deploy from dirty worktree>
 <error: cannot deploy to prod from feature branch etc.>
-$ kest -e dev helm deploy --force-from-laptop
+$ kest -e dev helm deploy --force
 debug: using misc/chart...
 info: will run misc/chart/deploy-scripts/migrate.sh at the appropriate time
 <effectively runs the correct actions script from the common-helm-chart repo that does our things etc. etc.>

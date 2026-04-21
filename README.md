@@ -97,7 +97,7 @@ eval "$(kest profile export)"
 
 ```sh
 kest -e dev release deploy
-kest -e prod release deploy --force-from-laptop   # bypass CI-only check
+kest -e prod release deploy --force              # bypass all safety guards
 kest release ls
 kest release uninstall
 ```

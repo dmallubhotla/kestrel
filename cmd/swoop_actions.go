@@ -12,9 +12,8 @@ import (
 )
 
 var (
-	swoopForceFromLaptop bool
-	swoopChanged         string
-	swoopActionProfile   string
+	swoopChanged       string
+	swoopActionProfile string
 )
 
 var swoopInitCmd = &cobra.Command{
@@ -72,7 +71,7 @@ Use --changed to target roots with modified .tf files.
 Use --profile to filter by account profile directory.
 
 Apply has additional safety guards:
-- Requires --force-from-laptop when not in CI
+- Requires --force when not in CI
 - Checks for a clean git worktree`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -366,10 +365,11 @@ func printBatchSummary(action string, results []batchResult) {
 }
 
 func applyGuards() error {
-	if !swoopForceFromLaptop {
-		if err := guard.CheckCI(); err != nil {
-			return err
-		}
+	if force {
+		return nil
+	}
+	if err := guard.CheckCI(); err != nil {
+		return err
 	}
 	if err := guard.CheckCleanWorktree(); err != nil {
 		return err
@@ -418,8 +418,6 @@ func init() {
 		c.ValidArgsFunction = completeSwoopRoots
 		c.RegisterFlagCompletionFunc("profile", completeSwoopProfiles)
 	}
-
-	swoopApplyCmd.Flags().BoolVar(&swoopForceFromLaptop, "force-from-laptop", false, "bypass the CI-only check for apply")
 
 	swoopCmd.AddCommand(swoopInitCmd)
 	swoopCmd.AddCommand(swoopPlanCmd)

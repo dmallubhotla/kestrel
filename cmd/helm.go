@@ -11,8 +11,7 @@ import (
 )
 
 var (
-	forceFromLaptop bool
-	tagOverride     string
+	tagOverride string
 )
 
 var helmCmd = &cobra.Command{
@@ -40,16 +39,16 @@ var helmDeployCmd = &cobra.Command{
 		}
 
 		// Safety checks
-		if !forceFromLaptop {
+		if !force {
 			if err := guard.CheckCI(); err != nil {
 				return err
 			}
-		}
-		if err := guard.CheckCleanWorktree(); err != nil {
-			return err
-		}
-		if err := guard.CheckBranch(environment); err != nil {
-			return err
+			if err := guard.CheckCleanWorktree(); err != nil {
+				return err
+			}
+			if err := guard.CheckBranch(environment); err != nil {
+				return err
+			}
 		}
 
 		// Run deploy scripts before deploy
@@ -108,7 +107,6 @@ var helmUninstallCmd = &cobra.Command{
 }
 
 func init() {
-	helmDeployCmd.Flags().BoolVar(&forceFromLaptop, "force-from-laptop", false, "bypass the CI-only check")
 	helmDeployCmd.Flags().StringVarP(&tagOverride, "tag", "t", "", "override the image tag")
 
 	helmCmd.AddCommand(helmDeployCmd)

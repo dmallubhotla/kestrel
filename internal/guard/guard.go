@@ -22,7 +22,7 @@ func CheckCI() error {
 	if IsCI() {
 		return nil
 	}
-	return fmt.Errorf("not in CI environment, no deploys! Use --force-from-laptop to override")
+	return fmt.Errorf("not in CI environment, no deploys! Use --force to override")
 }
 
 // CheckCleanWorktree returns an error if the git working tree is dirty.

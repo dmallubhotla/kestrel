@@ -15,6 +15,7 @@ import (
 var (
 	environment string
 	verbose     bool
+	force       bool
 	cfg         *config.Config
 	logCleanup  func()
 )
@@ -84,6 +85,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVarP(&environment, "environment", "e", "", "target environment (dev, stage, prod)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose/debug output")
+	rootCmd.PersistentFlags().BoolVar(&force, "force", false, "bypass all safety guards (CI-only, clean worktree, branch restrictions)")
 
 	rootCmd.RegisterFlagCompletionFunc("environment", completeTargetNames)
 }
