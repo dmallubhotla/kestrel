@@ -99,13 +99,20 @@ func runSwoopActionCmd(action, target string) error {
 		return fmt.Errorf("no terraform roots found under %s", baseDir)
 	}
 
-	matches, err := resolveTargets(roots, baseDir, target)
+	matches, matchType, err := resolveTargets(roots, baseDir, target)
 	if err != nil {
 		return err
 	}
 
 	if len(matches) == 0 {
 		return fmt.Errorf("no matching roots found")
+	}
+
+	// Fuzzy matches require user confirmation.
+	if matchType == swoop.MatchFuzzy {
+		if !confirmFuzzyMatch(matches, target) {
+			return fmt.Errorf("aborted")
+		}
 	}
 
 	// Single root — use the direct path.
@@ -123,7 +130,8 @@ func runSwoopActionCmd(action, target string) error {
 }
 
 // resolveTargets combines target string, --changed, and --profile into a set of roots.
-func resolveTargets(roots []swoop.Root, baseDir, target string) ([]swoop.Root, error) {
+// Returns the matched roots and the match type used for the target resolution.
+func resolveTargets(roots []swoop.Root, baseDir, target string) ([]swoop.Root, swoop.MatchType, error) {
 	matches := roots
 
 	// Filter by profile first.
@@ -139,17 +147,18 @@ func resolveTargets(roots []swoop.Root, baseDir, target string) ([]swoop.Root, e
 		}
 		changed, err := swoop.ChangedRoots(matches, baseDir, ref)
 		if err != nil {
-			return nil, fmt.Errorf("detecting changed roots: %w", err)
+			return nil, swoop.MatchAll, fmt.Errorf("detecting changed roots: %w", err)
 		}
 		matches = changed
 	}
 
 	// Filter by target string.
+	matchType := swoop.MatchAll
 	if target != "" {
-		matches = swoop.Resolve(matches, target)
+		matches, matchType = swoop.ResolveWithType(matches, target)
 	}
 
-	return matches, nil
+	return matches, matchType, nil
 }
 
 // isBatchTarget returns true if the target looks like a glob pattern
@@ -173,12 +182,18 @@ func runSwoopAction(action, target string) error {
 		return fmt.Errorf("no terraform roots found under %s", baseDir)
 	}
 
-	matches := swoop.Resolve(roots, target)
+	matches, matchType := swoop.ResolveWithType(roots, target)
 	if len(matches) == 0 {
 		return fmt.Errorf("no roots matching %q", target)
 	}
 	if len(matches) > 1 {
 		return ambiguousTargetError(matches, target)
+	}
+
+	if matchType == swoop.MatchFuzzy {
+		if !confirmFuzzyMatch(matches, target) {
+			return fmt.Errorf("aborted")
+		}
 	}
 
 	root := matches[0]
@@ -375,6 +390,21 @@ func applyGuards() error {
 		return err
 	}
 	return nil
+}
+
+// confirmFuzzyMatch prints the resolved root(s) and prompts the user for
+// confirmation. Returns true if the user confirms.
+func confirmFuzzyMatch(matches []swoop.Root, target string) bool {
+	fmt.Fprintf(os.Stderr, "fuzzy match for %q resolved to:\n", target)
+	for _, m := range matches {
+		fmt.Fprintf(os.Stderr, "  %s\n", m.Path)
+	}
+	fmt.Fprintf(os.Stderr, "\nProceed? [y/N] ")
+
+	var answer string
+	fmt.Scanln(&answer)
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	return answer == "y" || answer == "yes"
 }
 
 func ambiguousTargetError(matches []swoop.Root, target string) error {
