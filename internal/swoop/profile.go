@@ -7,7 +7,7 @@ import "github.com/example/kestrel/internal/config"
 //  2. Account ID from auto-discovery (stored on root by InspectDirs)
 //  3. Falls back to the active target's AWS profile if provided
 //
-// Account IDs are resolved to AWS profiles via cfg.Accounts.
+// Account IDs are resolved to AWS profiles via cfg.AWS.Accounts.
 func ResolveAWSProfile(root Root, cfg *config.Config, activeTarget string) string {
 	if cfg == nil {
 		return ""

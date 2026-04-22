@@ -24,16 +24,18 @@ targets:
   local:
     cluster: kind-local
 
-accounts:
-  "585912155334":
-    aws_profile: dev-sso
-  "593671994769":
-    aws_profile: prd-sso
+aws:
+  accounts:
+    "585912155334":
+      aws_profile: dev-sso
+    "593671994769":
+      aws_profile: prd-sso
 
-contexts:
-  eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
-  eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
-  kind-local: kind-local
+kubernetes:
+  contexts:
+    eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
+    eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
+    kind-local: kind-local
 
 directories:
   prd: "593671994769"
@@ -56,15 +58,15 @@ directories:
 		t.Errorf("targets[dev].cluster = %q", cfg.Targets["dev"].Cluster)
 	}
 
-	if len(cfg.Accounts) != 2 {
-		t.Fatalf("expected 2 accounts, got %d", len(cfg.Accounts))
+	if len(cfg.AWS.Accounts) != 2 {
+		t.Fatalf("expected 2 accounts, got %d", len(cfg.AWS.Accounts))
 	}
-	if cfg.Accounts["585912155334"].AwsProfile != "dev-sso" {
-		t.Errorf("accounts[585912155334] = %q", cfg.Accounts["585912155334"].AwsProfile)
+	if cfg.AWS.Accounts["585912155334"].AwsProfile != "dev-sso" {
+		t.Errorf("accounts[585912155334] = %q", cfg.AWS.Accounts["585912155334"].AwsProfile)
 	}
 
-	if cfg.Contexts["eks-dev"] != "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" {
-		t.Errorf("contexts[eks-dev] = %q", cfg.Contexts["eks-dev"])
+	if cfg.Kubernetes.Contexts["eks-dev"] != "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" {
+		t.Errorf("contexts[eks-dev] = %q", cfg.Kubernetes.Contexts["eks-dev"])
 	}
 
 	if cfg.Directories["prd"] != "593671994769" {
@@ -79,8 +81,11 @@ func TestLoadFile_SwoopConfig(t *testing.T) {
 swoop:
   cd_mode: pushd
   editor: nvim
-  auto_install_tf: true
   sort_order: alpha
+terraform:
+  auto_install_tfenv: true
+  write_version: true
+  default_version: "1.9.2"
 `), 0o644)
 
 	cfg, err := loadFile(path)
@@ -94,21 +99,31 @@ swoop:
 	if cfg.Swoop.Editor != "nvim" {
 		t.Errorf("Swoop.Editor = %q, want %q", cfg.Swoop.Editor, "nvim")
 	}
-	if !cfg.Swoop.AutoInstallTF {
-		t.Error("Swoop.AutoInstallTF should be true")
-	}
 	if cfg.Swoop.SortOrder != "alpha" {
 		t.Errorf("Swoop.SortOrder = %q, want %q", cfg.Swoop.SortOrder, "alpha")
+	}
+	if !cfg.Terraform.AutoInstallTfenv {
+		t.Error("Terraform.AutoInstallTfenv should be true")
+	}
+	if !cfg.Terraform.WriteVersion {
+		t.Error("Terraform.WriteVersion should be true")
+	}
+	if cfg.Terraform.DefaultVersion != "1.9.2" {
+		t.Errorf("Terraform.DefaultVersion = %q, want %q", cfg.Terraform.DefaultVersion, "1.9.2")
 	}
 }
 
 func TestCompose_SwoopFromUser(t *testing.T) {
 	user := &Config{
 		Swoop: SwoopConfig{
-			CDMode:        "pushd",
-			Editor:        "nvim",
-			AutoInstallTF: true,
-			SortOrder:     "alpha",
+			CDMode:    "pushd",
+			Editor:    "nvim",
+			SortOrder: "alpha",
+		},
+		Terraform: TerraformConfig{
+			AutoInstallTfenv: true,
+			WriteVersion:     true,
+			DefaultVersion:   "1.9.2",
 		},
 	}
 	project := &Config{
@@ -125,22 +140,32 @@ func TestCompose_SwoopFromUser(t *testing.T) {
 	if out.Swoop.Editor != "nvim" {
 		t.Errorf("Swoop.Editor = %q, want %q", out.Swoop.Editor, "nvim")
 	}
-	if !out.Swoop.AutoInstallTF {
-		t.Error("Swoop.AutoInstallTF should be preserved from user config")
-	}
 	if out.Swoop.SortOrder != "alpha" {
 		t.Errorf("Swoop.SortOrder = %q, want %q", out.Swoop.SortOrder, "alpha")
+	}
+	if !out.Terraform.AutoInstallTfenv {
+		t.Error("Terraform.AutoInstallTfenv should be preserved from user config")
+	}
+	if !out.Terraform.WriteVersion {
+		t.Error("Terraform.WriteVersion should be preserved from user config")
+	}
+	if out.Terraform.DefaultVersion != "1.9.2" {
+		t.Errorf("Terraform.DefaultVersion = %q, want %q", out.Terraform.DefaultVersion, "1.9.2")
 	}
 }
 
 func TestCompose_ProjectOverridesUser(t *testing.T) {
 	user := &Config{
 		Helm: HelmConfig{Chart: "user-chart", Namespace: "user-ns"},
-		Accounts: map[string]AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: AWSConfig{
+			Accounts: map[string]AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
-		Contexts: map[string]string{
-			"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+		Kubernetes: KubernetesConfig{
+			Contexts: map[string]string{
+				"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+			},
 		},
 	}
 	project := &Config{
@@ -166,13 +191,13 @@ func TestCompose_ProjectOverridesUser(t *testing.T) {
 	if len(out.Targets) != 2 {
 		t.Fatalf("expected 2 targets, got %d", len(out.Targets))
 	}
-	// Accounts from user preserved.
-	if out.Accounts["585912155334"].AwsProfile != "dev-sso" {
-		t.Errorf("Accounts[585912155334] = %v", out.Accounts["585912155334"])
+	// AWS accounts from user preserved.
+	if out.AWS.Accounts["585912155334"].AwsProfile != "dev-sso" {
+		t.Errorf("AWS.Accounts[585912155334] = %v", out.AWS.Accounts["585912155334"])
 	}
-	// Contexts from user preserved.
-	if out.Contexts["eks-dev"] == "" {
-		t.Error("Contexts[eks-dev] should be preserved from user")
+	// Kubernetes contexts from user preserved.
+	if out.Kubernetes.Contexts["eks-dev"] == "" {
+		t.Error("Kubernetes.Contexts[eks-dev] should be preserved from user")
 	}
 	// ProjectTargets raw layer.
 	if len(out.ProjectTargets) != 2 {
@@ -186,12 +211,16 @@ func TestResolveTarget(t *testing.T) {
 			"dev":   {Cluster: "eks-dev"},
 			"local": {Cluster: "kind-local"},
 		},
-		Accounts: map[string]AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: AWSConfig{
+			Accounts: map[string]AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
-		Contexts: map[string]string{
-			"eks-dev":    "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
-			"kind-local": "kind-local",
+		Kubernetes: KubernetesConfig{
+			Contexts: map[string]string{
+				"eks-dev":    "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+				"kind-local": "kind-local",
+			},
 		},
 	}
 
@@ -262,8 +291,10 @@ func TestExtractAccountIDFromARN(t *testing.T) {
 
 func TestResolveAccountProfile(t *testing.T) {
 	cfg := &Config{
-		Accounts: map[string]AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: AWSConfig{
+			Accounts: map[string]AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
 	}
 
@@ -277,8 +308,10 @@ func TestResolveAccountProfile(t *testing.T) {
 
 func TestResolveClusterContext(t *testing.T) {
 	cfg := &Config{
-		Contexts: map[string]string{
-			"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+		Kubernetes: KubernetesConfig{
+			Contexts: map[string]string{
+				"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+			},
 		},
 	}
 

@@ -10,27 +10,19 @@ import (
 )
 
 type Config struct {
-	Helm      HelmConfig      `yaml:"helm,omitempty"`
-	Terraform TerraformConfig `yaml:"terraform,omitempty"`
-	Swoop     SwoopConfig     `yaml:"swoop,omitempty"`
+	Helm       HelmConfig       `yaml:"helm,omitempty"`
+	Terraform  TerraformConfig  `yaml:"terraform,omitempty"`
+	Swoop      SwoopConfig      `yaml:"swoop,omitempty"`
+	AWS        AWSConfig        `yaml:"aws,omitempty"`
+	Kubernetes KubernetesConfig `yaml:"kubernetes,omitempty"`
 
 	// Targets are named deployment targets for helm (project config, committed).
 	// Each maps a name (= values file) to a cluster.
 	Targets map[string]TargetConfig `yaml:"targets,omitempty"`
 
-	// Accounts maps AWS account IDs to access credentials (user config).
-	Accounts map[string]AccountConfig `yaml:"accounts,omitempty"`
-
-	// Contexts maps cluster names to kube context strings (user config).
-	// If empty, cluster names are matched against kubeconfig at autoconfigure time.
-	Contexts map[string]string `yaml:"contexts,omitempty"`
-
 	// Directories maps top-level directory names to AWS account IDs (project config).
 	// Used for centralized IaC repos where auto-discovery might miss some dirs.
 	Directories map[string]string `yaml:"directories,omitempty"`
-
-	// AutoSSOLogin enables automatic aws sso login when a session is expired (user config).
-	AutoSSOLogin bool `yaml:"auto_sso_login,omitempty"`
 
 	// Raw layers preserved for source-aware commands (not serialised).
 	ProjectTargets map[string]TargetConfig `yaml:"-"`
@@ -42,9 +34,25 @@ type TargetConfig struct {
 	Cluster string `yaml:"cluster,omitempty"`
 }
 
-// AccountConfig maps an AWS account ID to access credentials.
-type AccountConfig struct {
+// AWSConfig holds AWS-specific user configuration.
+type AWSConfig struct {
+	// Accounts maps AWS account IDs to access credentials (user config).
+	Accounts map[string]AWSAccountConfig `yaml:"accounts,omitempty"`
+
+	// AutoSSOLogin enables automatic aws sso login when a session is expired.
+	AutoSSOLogin bool `yaml:"auto_sso_login,omitempty"`
+}
+
+// AWSAccountConfig maps an AWS account ID to access credentials.
+type AWSAccountConfig struct {
 	AwsProfile string `yaml:"aws_profile,omitempty"`
+}
+
+// KubernetesConfig holds Kubernetes-specific user configuration.
+type KubernetesConfig struct {
+	// Contexts maps cluster names to kube context strings (user config).
+	// If empty, cluster names are matched against kubeconfig at autoconfigure time.
+	Contexts map[string]string `yaml:"contexts,omitempty"`
 }
 
 // Sources records the file paths that contributed to the loaded config.
@@ -63,6 +71,19 @@ type HelmConfig struct {
 
 type TerraformConfig struct {
 	IACDir string `yaml:"iac_dir,omitempty"`
+
+	// WriteVersion writes a .terraform-version file into roots that lack
+	// one, pinning DefaultVersion or the currently active terraform version.
+	WriteVersion bool `yaml:"write_version,omitempty"`
+
+	// DefaultVersion is the version written to .terraform-version when
+	// WriteVersion is enabled. If empty, the currently active terraform
+	// version is detected and used instead.
+	DefaultVersion string `yaml:"default_version,omitempty"`
+
+	// AutoInstallTfenv automatically runs tfenv install when a version
+	// mismatch is detected, without prompting. Skipped in CI.
+	AutoInstallTfenv bool `yaml:"auto_install_tfenv,omitempty"`
 }
 
 // SwoopConfig holds user preferences for the swoop subsystem.
@@ -72,10 +93,6 @@ type SwoopConfig struct {
 
 	// Editor overrides $EDITOR for swoop edit. Empty means use $EDITOR.
 	Editor string `yaml:"editor,omitempty"`
-
-	// AutoInstallTF automatically runs tfenv install when a version mismatch
-	// is detected, without prompting. Skipped in CI.
-	AutoInstallTF bool `yaml:"auto_install_tf,omitempty"`
 
 	// SortOrder controls root ordering: "recent" (default) or "alpha".
 	SortOrder string `yaml:"sort_order,omitempty"`
@@ -199,9 +216,13 @@ func compose(user, project *Config) *Config {
 		out.Helm.Namespace = project.Helm.Namespace
 	}
 
-	// Terraform
+	// Terraform: IACDir comes from project; behaviour flags come from user
+	// (already in out) but project can override non-zero values.
 	if project.Terraform.IACDir != "" {
 		out.Terraform.IACDir = project.Terraform.IACDir
+	}
+	if project.Terraform.DefaultVersion != "" {
+		out.Terraform.DefaultVersion = project.Terraform.DefaultVersion
 	}
 
 	// Targets come from project config.
@@ -215,7 +236,7 @@ func compose(user, project *Config) *Config {
 		out.Directories = project.Directories
 	}
 
-	// Accounts and Contexts come from user config (already in out via *user).
+	// AWS and Kubernetes come from user config (already in out via *user).
 
 	return &out
 }
@@ -253,7 +274,7 @@ func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
 
 // ResolveAccountProfile resolves an account ID to an AWS profile name.
 func (c *Config) ResolveAccountProfile(accountID string) string {
-	if acct, ok := c.Accounts[accountID]; ok {
+	if acct, ok := c.AWS.Accounts[accountID]; ok {
 		return acct.AwsProfile
 	}
 	return ""
@@ -261,7 +282,7 @@ func (c *Config) ResolveAccountProfile(accountID string) string {
 
 // ResolveClusterContext resolves a cluster name to a kube context string.
 func (c *Config) ResolveClusterContext(cluster string) string {
-	if ctx, ok := c.Contexts[cluster]; ok {
+	if ctx, ok := c.Kubernetes.Contexts[cluster]; ok {
 		return ctx
 	}
 	return ""

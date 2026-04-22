@@ -144,7 +144,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	sections = append(sections, checkTools(awsFound))
 	sections = append(sections, checkDoctorConfig())
 
-	if awsFound && cfg != nil && len(cfg.Accounts) > 0 {
+	if awsFound && cfg != nil && len(cfg.AWS.Accounts) > 0 {
 		sections = append(sections, checkSessions())
 	}
 
@@ -257,7 +257,7 @@ func checkDoctorConfig() checkSection {
 
 	// Accounts and contexts from kest config.
 	if cfg != nil {
-		acctCount := len(cfg.Accounts)
+		acctCount := len(cfg.AWS.Accounts)
 		if acctCount > 0 {
 			checks = append(checks, checkResult{
 				status: statusPass,
@@ -271,7 +271,7 @@ func checkDoctorConfig() checkSection {
 			})
 		}
 
-		ctxCount := len(cfg.Contexts)
+		ctxCount := len(cfg.Kubernetes.Contexts)
 		if ctxCount > 0 {
 			checks = append(checks, checkResult{
 				status: statusPass,
@@ -337,14 +337,14 @@ func checkSessions() checkSection {
 	seen := make(map[string]bool)
 	var entries []profileEntry
 	// Sort account IDs for deterministic output.
-	accountIDs := make([]string, 0, len(cfg.Accounts))
-	for id := range cfg.Accounts {
+	accountIDs := make([]string, 0, len(cfg.AWS.Accounts))
+	for id := range cfg.AWS.Accounts {
 		accountIDs = append(accountIDs, id)
 	}
 	sort.Strings(accountIDs)
 
 	for _, id := range accountIDs {
-		acct := cfg.Accounts[id]
+		acct := cfg.AWS.Accounts[id]
 		if acct.AwsProfile != "" && !seen[acct.AwsProfile] {
 			seen[acct.AwsProfile] = true
 			entries = append(entries, profileEntry{name: acct.AwsProfile, accountID: id})

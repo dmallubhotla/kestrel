@@ -97,12 +97,12 @@ var configAccountsCmd = &cobra.Command{
 	Use:   "accounts",
 	Short: "List configured AWS account mappings",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(cfg.Accounts) == 0 {
+		if len(cfg.AWS.Accounts) == 0 {
 			fmt.Println("No accounts configured.")
 			return nil
 		}
 
-		for id, acct := range cfg.Accounts {
+		for id, acct := range cfg.AWS.Accounts {
 			fmt.Printf("%s  aws_profile=%s\n", id, acct.AwsProfile)
 		}
 		return nil

@@ -99,11 +99,11 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		global = &config.Config{}
 	}
-	if global.Accounts == nil {
-		global.Accounts = make(map[string]config.AccountConfig)
+	if global.AWS.Accounts == nil {
+		global.AWS.Accounts = make(map[string]config.AWSAccountConfig)
 	}
-	if global.Contexts == nil {
-		global.Contexts = make(map[string]string)
+	if global.Kubernetes.Contexts == nil {
+		global.Kubernetes.Contexts = make(map[string]string)
 	}
 
 	// --- AWS profiles: one prompt per unique account ID found in ~/.aws/config ---
@@ -123,7 +123,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 
 			if len(matching) == 1 {
 				// Only one profile for this account — use it automatically.
-				global.Accounts[accountID] = config.AccountConfig{
+				global.AWS.Accounts[accountID] = config.AWSAccountConfig{
 					AwsProfile: matching[0].Name,
 				}
 				fmt.Printf("  aws_profile: %s (auto, only match)\n", matching[0].Name)
@@ -135,7 +135,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 			preselect := 0
 
 			// Check existing config.
-			if acct, ok := global.Accounts[accountID]; ok && acct.AwsProfile != "" {
+			if acct, ok := global.AWS.Accounts[accountID]; ok && acct.AwsProfile != "" {
 				for i, p := range matching {
 					if p.Name == acct.AwsProfile {
 						preselect = i + 1
@@ -169,7 +169,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 
 			if sm.cursor > 0 {
 				selectedProfile := matching[sm.cursor-1].Name
-				global.Accounts[accountID] = config.AccountConfig{
+				global.AWS.Accounts[accountID] = config.AWSAccountConfig{
 					AwsProfile: selectedProfile,
 				}
 				fmt.Printf("  aws_profile: %s\n", selectedProfile)
@@ -182,7 +182,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 	if kubeErr == nil && len(kubeContexts) > 0 {
 		// Pre-select contexts that are already configured.
 		preselected := make(map[int]bool)
-		for _, existingCtx := range global.Contexts {
+		for _, existingCtx := range global.Kubernetes.Contexts {
 			for i, c := range kubeContexts {
 				if c.Name == existingCtx {
 					preselected[i] = true
@@ -214,11 +214,11 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		}
 
 		// Build contexts map: short name (cluster) → full context name.
-		global.Contexts = make(map[string]string)
+		global.Kubernetes.Contexts = make(map[string]string)
 		for i, c := range kubeContexts {
 			if ms.selected[i] {
 				shortName := kubeconfig.ShortName(c.Name)
-				global.Contexts[shortName] = c.Name
+				global.Kubernetes.Contexts[shortName] = c.Name
 				fmt.Printf("  %s → %s\n", shortName, c.Name)
 			}
 		}
@@ -227,8 +227,8 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 
 	// Clean config for writing: only accounts and contexts.
 	toWrite := &config.Config{
-		Accounts: global.Accounts,
-		Contexts: global.Contexts,
+		AWS:        global.AWS,
+		Kubernetes: global.Kubernetes,
 	}
 
 	for {

@@ -216,6 +216,16 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 		return err
 	}
 
+	// Write .terraform-version if missing and configured.
+	if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
+		if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		} else if v != "" {
+			root.TFVersion = v
+			fmt.Fprintf(os.Stderr, "wrote .terraform-version: %s\n", v)
+		}
+	}
+
 	// tfenv preflight check.
 	if err := handleTFVersionCheck(root); err != nil {
 		return err
@@ -266,7 +276,7 @@ func handleTFVersionCheck(root swoop.Root) error {
 	}
 
 	// Auto-install if configured (skip in CI where tfenv use is implicit).
-	if cfg != nil && cfg.Swoop.AutoInstallTF && !guard.IsCI() {
+	if cfg != nil && cfg.Terraform.AutoInstallTfenv && !guard.IsCI() {
 		fmt.Fprintf(os.Stderr, "  auto-installing terraform %s via tfenv...\n\n", check.Required)
 		if err := swoop.InstallTFVersion(check.Required); err != nil {
 			return fmt.Errorf("tfenv install failed: %w", err)
@@ -332,6 +342,16 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)
+
+		// Write .terraform-version if missing and configured.
+		if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
+			if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+				fmt.Fprintf(os.Stderr, "  warning: %v\n", err)
+			} else if v != "" {
+				root.TFVersion = v
+				fmt.Fprintf(os.Stderr, "  wrote .terraform-version: %s\n", v)
+			}
+		}
 
 		check := swoop.CheckTFVersion(root)
 		if !check.OK {

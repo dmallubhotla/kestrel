@@ -12,9 +12,11 @@ func TestResolveAWSProfile_DirectoryMapping(t *testing.T) {
 			"prd": "593671994769",
 			"dev": "585912155334",
 		},
-		Accounts: map[string]config.AccountConfig{
-			"593671994769": {AwsProfile: "prd-sso"},
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"593671994769": {AwsProfile: "prd-sso"},
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
 	}
 
@@ -27,8 +29,10 @@ func TestResolveAWSProfile_DirectoryMapping(t *testing.T) {
 
 func TestResolveAWSProfile_AccountIDOnRoot(t *testing.T) {
 	cfg := &config.Config{
-		Accounts: map[string]config.AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
 	}
 
@@ -44,9 +48,11 @@ func TestResolveAWSProfile_DirectoryOverridesAutoDiscovery(t *testing.T) {
 		Directories: map[string]string{
 			"global": "593671994769",
 		},
-		Accounts: map[string]config.AccountConfig{
-			"593671994769": {AwsProfile: "prd-sso"},
-			"111111111111": {AwsProfile: "other"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"593671994769": {AwsProfile: "prd-sso"},
+				"111111111111": {AwsProfile: "other"},
+			},
 		},
 	}
 
@@ -68,8 +74,10 @@ func TestResolveAWSProfile_NilConfig(t *testing.T) {
 
 func TestResolveAWSProfile_NoMatch(t *testing.T) {
 	cfg := &config.Config{
-		Accounts: map[string]config.AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
 	}
 	root := Root{Dir: "unknown"}
@@ -84,11 +92,15 @@ func TestResolveAWSProfile_FallsBackToActiveTarget(t *testing.T) {
 		Targets: map[string]config.TargetConfig{
 			"dev": {Cluster: "eks-dev"},
 		},
-		Contexts: map[string]string{
-			"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+		Kubernetes: config.KubernetesConfig{
+			Contexts: map[string]string{
+				"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+			},
 		},
-		Accounts: map[string]config.AccountConfig{
-			"585912155334": {AwsProfile: "dev-sso"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+			},
 		},
 	}
 
@@ -106,8 +118,10 @@ func TestResolveAWSProfile_MultipleDirsSameAccount(t *testing.T) {
 			"ci":         "593671994769",
 			"example-prod": "593671994769",
 		},
-		Accounts: map[string]config.AccountConfig{
-			"593671994769": {AwsProfile: "prd-sso"},
+		AWS: config.AWSConfig{
+			Accounts: map[string]config.AWSAccountConfig{
+				"593671994769": {AwsProfile: "prd-sso"},
+			},
 		},
 	}
 

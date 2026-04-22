@@ -65,7 +65,7 @@ var rootCmd = &cobra.Command{
 // ensureSSOSession checks the AWS session for the given profile and runs
 // sso login if needed. No-op when auto_sso_login is off or running in CI.
 func ensureSSOSession(profile string) error {
-	if cfg == nil || !cfg.AutoSSOLogin || guard.IsCI() {
+	if cfg == nil || !cfg.AWS.AutoSSOLogin || guard.IsCI() {
 		return nil
 	}
 	return awslogin.EnsureSession(profile)

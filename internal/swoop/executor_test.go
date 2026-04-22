@@ -1,6 +1,10 @@
 package swoop
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParsePlanSummary_Changes(t *testing.T) {
 	output := `
@@ -53,5 +57,44 @@ func TestParseTerraformVersion(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("parseTerraformVersion(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestEnsureTFVersion_SkipsWhenAlreadySet(t *testing.T) {
+	root := Root{
+		AbsPath:   t.TempDir(),
+		TFVersion: "1.9.2",
+	}
+	got, err := EnsureTFVersion(root, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty version, got %q", got)
+	}
+	// File should not have been created.
+	if _, err := os.Stat(filepath.Join(root.AbsPath, ".terraform-version")); err == nil {
+		t.Error("expected no .terraform-version file, but one exists")
+	}
+}
+
+func TestEnsureTFVersion_WritesPreferredVersion(t *testing.T) {
+	dir := t.TempDir()
+	root := Root{AbsPath: dir}
+
+	got, err := EnsureTFVersion(root, "1.5.7")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "1.5.7" {
+		t.Errorf("expected 1.5.7, got %q", got)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".terraform-version"))
+	if err != nil {
+		t.Fatalf("could not read .terraform-version: %v", err)
+	}
+	if string(data) != "1.5.7\n" {
+		t.Errorf("file content = %q, want %q", string(data), "1.5.7\n")
 	}
 }

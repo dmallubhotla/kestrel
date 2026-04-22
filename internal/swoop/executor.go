@@ -160,3 +160,36 @@ func parseTerraformVersion(output string) string {
 func FormatTFVersionCommand(version string) string {
 	return fmt.Sprintf("tfenv install %s", version)
 }
+
+// EnsureTFVersion writes a .terraform-version file into the root directory if
+// one does not already exist. If preferredVersion is non-empty it is used
+// directly; otherwise the currently active terraform version is detected.
+// Returns the version written, or "" if the file already existed.
+func EnsureTFVersion(root Root, preferredVersion string) (string, error) {
+	if root.TFVersion != "" {
+		return "", nil
+	}
+
+	version := preferredVersion
+	if version == "" {
+		// Detect active terraform version.
+		cmd := exec.Command("terraform", "version")
+		cmd.Dir = root.AbsPath
+		out, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("could not detect terraform version: %w", err)
+		}
+
+		version = parseTerraformVersion(string(out))
+		if version == "" {
+			return "", fmt.Errorf("could not parse terraform version from output")
+		}
+	}
+
+	versionFile := root.AbsPath + "/.terraform-version"
+	if err := os.WriteFile(versionFile, []byte(version+"\n"), 0644); err != nil {
+		return "", fmt.Errorf("could not write .terraform-version: %w", err)
+	}
+
+	return version, nil
+}
