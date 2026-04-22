@@ -92,8 +92,31 @@ func resolveBaseDir() (string, error) {
 		return filepath.Abs(filepath.Dir(cfg.Sources.Project))
 	}
 
+	// Walk up looking for .git as a repo root signal.
+	if root, err := findRepoRoot(); err == nil {
+		return root, nil
+	}
+
 	// Fall back to cwd.
 	return os.Getwd()
+}
+
+// findRepoRoot walks up from cwd looking for a .git directory.
+func findRepoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no .git found")
+		}
+		dir = parent
+	}
 }
 
 // discoverRoots discovers terraform roots and enriches them with account IDs,
