@@ -83,6 +83,64 @@ func gitDiffFiles(dir, ref string) ([]string, error) {
 	return files, nil
 }
 
+// DirtyRoots returns the set of root paths that have uncommitted changes
+// (staged or unstaged). Uses a single git status call for the whole base dir.
+func DirtyRoots(roots []Root, baseDir string) map[string]bool {
+	files, err := gitStatusFiles(baseDir)
+	if err != nil {
+		return nil
+	}
+	return matchDirtyFiles(roots, baseDir, files)
+}
+
+// matchDirtyFiles is the pure logic: given dirty file paths (relative to repo root),
+// return the set of root paths that contain at least one dirty file.
+func matchDirtyFiles(roots []Root, baseDir string, dirtyFiles []string) map[string]bool {
+	result := make(map[string]bool)
+	for _, f := range dirtyFiles {
+		dir := filepath.Dir(f)
+		for _, r := range roots {
+			if pathContains(r.AbsPath, filepath.Join(baseDir, dir)) {
+				result[r.Path] = true
+			}
+		}
+	}
+	return result
+}
+
+// gitStatusFiles returns file paths with uncommitted changes (relative to repo root).
+func gitStatusFiles(dir string) ([]string, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		// Porcelain format: XY <space> <path> (first 3 chars are status + space).
+		file := strings.TrimSpace(line[3:])
+		if file != "" {
+			files = append(files, file)
+		}
+	}
+	return files, nil
+}
+
+// EnrichGitStatus sets GitDirty on each root that has uncommitted changes.
+func EnrichGitStatus(roots []Root, baseDir string) {
+	dirty := DirtyRoots(roots, baseDir)
+	for i := range roots {
+		if dirty[roots[i].Path] {
+			roots[i].GitDirty = true
+		}
+	}
+}
+
 // pathContains returns true if child is inside or equal to parent.
 func pathContains(parent, child string) bool {
 	parent = filepath.Clean(parent)

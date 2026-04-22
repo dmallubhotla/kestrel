@@ -23,6 +23,14 @@ type Root struct {
 
 	// Initialized is true when a .terraform/ directory exists in the root.
 	Initialized bool
+
+	// GitDirty is true when the root contains uncommitted changes.
+	// Set by EnrichGitStatus after discovery.
+	GitDirty bool
+
+	// TFModified is the most recent modification time of any .tf file in the root.
+	// Set by EnrichTFMtimes after discovery.
+	TFModified time.Time
 }
 
 // StateEntry records when terraform actions were last run against a root.

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Discover walks baseDir and returns all terraform root directories found.
@@ -117,4 +118,33 @@ func readTFVersion(dir string) string {
 func isInitialized(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, ".terraform"))
 	return err == nil && info.IsDir()
+}
+
+// latestTFMtime returns the most recent modification time of any .tf file in dir.
+func latestTFMtime(dir string) time.Time {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tf") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
+	}
+	return latest
+}
+
+// EnrichTFMtimes sets TFModified on each root to the most recent .tf file mtime.
+func EnrichTFMtimes(roots []Root) {
+	for i := range roots {
+		roots[i].TFModified = latestTFMtime(roots[i].AbsPath)
+	}
 }

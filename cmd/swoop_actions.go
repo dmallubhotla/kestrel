@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"text/tabwriter"
 
@@ -447,6 +448,108 @@ func recordAction(baseDir, rootPath, action string, result *swoop.ExecResult) {
 	state.Save()
 }
 
+var swoopEditCmd = &cobra.Command{
+	Use:   "edit <target>",
+	Short: "Open $EDITOR in a terraform root's directory",
+	Long: `Open your editor in the directory of a terraform root.
+
+Uses swoop.editor from config, then $EDITOR, then $VISUAL.
+Target can be an exact path, glob pattern, or substring match.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSwoopSingleCmd("edit", args[0])
+	},
+}
+
+var swoopCDCmd = &cobra.Command{
+	Use:   "cd <target>",
+	Short: "Print a cd command for a terraform root (use with eval)",
+	Long: `Outputs a cd (or pushd) command for a terraform root's directory.
+
+Usage:
+  eval "$(kest swoop cd <target>)"
+
+The shell command (cd or pushd) is controlled by swoop.cd_mode in config.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSwoopSingleCmd("cd", args[0])
+	},
+}
+
+// runSwoopSingleCmd resolves a single root and dispatches to edit or cd.
+func runSwoopSingleCmd(action, target string) error {
+	baseDir, err := resolveBaseDir()
+	if err != nil {
+		return err
+	}
+
+	roots, err := discoverRoots(baseDir)
+	if err != nil {
+		return err
+	}
+	if len(roots) == 0 {
+		return fmt.Errorf("no terraform roots found under %s", baseDir)
+	}
+
+	matches, matchType := swoop.ResolveWithType(roots, target)
+	if len(matches) == 0 {
+		return fmt.Errorf("no roots matching %q", target)
+	}
+	if len(matches) > 1 {
+		return ambiguousTargetError(matches, target)
+	}
+
+	if matchType == swoop.MatchFuzzy {
+		if !confirmFuzzyMatch(matches, target) {
+			return fmt.Errorf("aborted")
+		}
+	}
+
+	root := matches[0]
+	switch action {
+	case "edit":
+		return executeEdit(root)
+	case "cd":
+		return executeCD(root)
+	default:
+		return fmt.Errorf("unknown action %q", action)
+	}
+}
+
+// executeEdit opens the user's editor in the root's directory.
+func executeEdit(root swoop.Root) error {
+	editor := ""
+	if cfg != nil {
+		editor = cfg.Swoop.Editor
+	}
+	if editor == "" {
+		editor = os.Getenv("EDITOR")
+	}
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		return fmt.Errorf("no editor configured — set $EDITOR or swoop.editor in config")
+	}
+
+	cmd := exec.Command(editor, ".")
+	cmd.Dir = root.AbsPath
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// executeCD prints a shell cd/pushd command to stdout for eval consumption.
+func executeCD(root swoop.Root) error {
+	verb := "cd"
+	if cfg != nil && cfg.Swoop.CDMode == "pushd" {
+		verb = "pushd"
+	}
+	fmt.Printf("%s %s\n", verb, shellQuote(root.AbsPath))
+	return nil
+}
+
 func init() {
 	// Shared flags for all action commands.
 	for _, c := range []*cobra.Command{swoopInitCmd, swoopPlanCmd, swoopApplyCmd} {
@@ -462,4 +565,10 @@ func init() {
 	swoopCmd.AddCommand(swoopInitCmd)
 	swoopCmd.AddCommand(swoopPlanCmd)
 	swoopCmd.AddCommand(swoopApplyCmd)
+
+	// Edit and cd don't share the batch flags.
+	swoopEditCmd.ValidArgsFunction = completeSwoopRoots
+	swoopCDCmd.ValidArgsFunction = completeSwoopRoots
+	swoopCmd.AddCommand(swoopEditCmd)
+	swoopCmd.AddCommand(swoopCDCmd)
 }

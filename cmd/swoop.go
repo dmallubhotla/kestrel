@@ -96,7 +96,8 @@ func resolveBaseDir() (string, error) {
 	return os.Getwd()
 }
 
-// discoverRoots discovers terraform roots and enriches them with account IDs.
+// discoverRoots discovers terraform roots and enriches them with account IDs,
+// git status, and .tf modification times.
 func discoverRoots(baseDir string) ([]swoop.Root, error) {
 	roots, err := swoop.Discover(baseDir)
 	if err != nil {
@@ -104,43 +105,88 @@ func discoverRoots(baseDir string) ([]swoop.Root, error) {
 	}
 	if len(roots) > 0 {
 		swoop.EnrichWithAccountIDs(roots, baseDir)
+		swoop.EnrichGitStatus(roots, baseDir)
+		swoop.EnrichTFMtimes(roots)
 	}
 	return roots, nil
 }
 
 func sortRoots(roots []swoop.Root, state *swoop.State) {
-	// Alphabetical-only when configured.
-	if cfg != nil && cfg.Swoop.SortOrder == "alpha" {
+	order := ""
+	if cfg != nil {
+		order = cfg.Swoop.SortOrder
+	}
+
+	switch order {
+	case "alpha":
 		sort.Slice(roots, func(i, j int) bool {
 			return roots[i].Path < roots[j].Path
 		})
-		return
+	case "recent":
+		sort.Slice(roots, func(i, j int) bool {
+			return compareRecent(roots[i], roots[j], state)
+		})
+	default: // "" or "git" — git-first is the default.
+		sort.Slice(roots, func(i, j int) bool {
+			return compareGitFirst(roots[i], roots[j], state)
+		})
+	}
+}
+
+// compareGitFirst sorts: dirty first (by tf mtime), then by activity, then by tf mtime, then alpha.
+func compareGitFirst(a, b swoop.Root, state *swoop.State) bool {
+	// Dirty roots sort before clean roots.
+	if a.GitDirty != b.GitDirty {
+		return a.GitDirty
 	}
 
-	// Default: recency-first ordering.
-	sort.Slice(roots, func(i, j int) bool {
-		ti := lastActivity(state, roots[i].Path)
-		tj := lastActivity(state, roots[j].Path)
+	// Among same dirty status: prefer roots with recent terraform activity.
+	ta := lastActivity(state, a.Path)
+	tb := lastActivity(state, b.Path)
+	if !ta.IsZero() && tb.IsZero() {
+		return true
+	}
+	if ta.IsZero() && !tb.IsZero() {
+		return false
+	}
+	if !ta.IsZero() && !tb.IsZero() && !ta.Equal(tb) {
+		return ta.After(tb)
+	}
 
-		// Roots with activity sort before those without.
-		if !ti.IsZero() && tj.IsZero() {
-			return true
-		}
-		if ti.IsZero() && !tj.IsZero() {
-			return false
-		}
-		// Both have activity: most recent first.
-		if !ti.IsZero() && !tj.IsZero() && !ti.Equal(tj) {
-			return ti.After(tj)
-		}
-		// Fall back to alphabetical.
-		return roots[i].Path < roots[j].Path
-	})
+	// Then by .tf file modification time.
+	if !a.TFModified.IsZero() && !b.TFModified.IsZero() && !a.TFModified.Equal(b.TFModified) {
+		return a.TFModified.After(b.TFModified)
+	}
+	if !a.TFModified.IsZero() && b.TFModified.IsZero() {
+		return true
+	}
+	if a.TFModified.IsZero() && !b.TFModified.IsZero() {
+		return false
+	}
+
+	return a.Path < b.Path
+}
+
+// compareRecent sorts by terraform activity recency, then alphabetical.
+func compareRecent(a, b swoop.Root, state *swoop.State) bool {
+	ta := lastActivity(state, a.Path)
+	tb := lastActivity(state, b.Path)
+
+	if !ta.IsZero() && tb.IsZero() {
+		return true
+	}
+	if ta.IsZero() && !tb.IsZero() {
+		return false
+	}
+	if !ta.IsZero() && !tb.IsZero() && !ta.Equal(tb) {
+		return ta.After(tb)
+	}
+	return a.Path < b.Path
 }
 
 func printRootTable(roots []swoop.Root, state *swoop.State) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ROOT\tPROFILE\tAWS PROFILE\tTF VERSION\tINIT\tLAST ACTIVITY")
+	fmt.Fprintln(w, "ROOT\tPROFILE\tAWS PROFILE\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY")
 
 	for _, r := range roots {
 		init := "-"
@@ -153,6 +199,11 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 			ver = "-"
 		}
 
+		dirty := ""
+		if r.GitDirty {
+			dirty = "*"
+		}
+
 		activity := lastActivityStr(state, r.Path)
 
 		aws := swoop.ResolveAWSProfile(r, cfg, environment)
@@ -160,7 +211,7 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 			aws = "-"
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Profile, aws, ver, init, activity)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Profile, aws, ver, init, dirty, activity)
 	}
 	w.Flush()
 
@@ -199,7 +250,15 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stderr, "\n%s\n\n",
 		swoopHelpStyle.Render(
 			fmt.Sprintf("hint: kest swoop %s %s", action.action, action.root.Path)))
-	return runSwoopAction(action.action, action.root.Path)
+
+	switch action.action {
+	case "edit":
+		return executeEdit(action.root)
+	case "cd":
+		return executeCD(action.root)
+	default:
+		return runSwoopAction(action.action, action.root.Path)
+	}
 }
 
 func init() {

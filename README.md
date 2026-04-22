@@ -138,9 +138,11 @@ kest swoop list --profile prd   # filter by AWS profile
 kest swoop plan "live/dev/*"    # glob targeting
 kest swoop plan infra           # substring match
 kest swoop plan --changed       # only roots with git changes
+kest swoop edit dev/vpc         # open $EDITOR in root directory
+eval "$(kest swoop cd dev/vpc)" # cd into root directory
 ```
 
-Swoop tracks the last time you ran init/plan/apply on each root, so you can see at a glance what's stale.
+Swoop tracks the last time you ran init/plan/apply on each root, so you can see at a glance what's stale. The TUI also supports `e` to edit and `c` to cd directly from the root picker.
 
 ### Running arbitrary commands
 

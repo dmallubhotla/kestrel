@@ -103,6 +103,73 @@ func TestMatchChangedFiles_NoDuplicates(t *testing.T) {
 	}
 }
 
+func TestMatchDirtyFiles_SingleRoot(t *testing.T) {
+	base := "/repo"
+	roots := []Root{
+		{Path: filepath.Join("dev", "vpc"), AbsPath: filepath.Join(base, "dev", "vpc")},
+		{Path: filepath.Join("dev", "rds"), AbsPath: filepath.Join(base, "dev", "rds")},
+	}
+
+	dirty := matchDirtyFiles(roots, base, []string{
+		filepath.Join("dev", "vpc", "main.tf"),
+	})
+
+	if len(dirty) != 1 {
+		t.Fatalf("expected 1 dirty root, got %d", len(dirty))
+	}
+	if !dirty[filepath.Join("dev", "vpc")] {
+		t.Error("expected dev/vpc to be dirty")
+	}
+}
+
+func TestMatchDirtyFiles_AnyFileType(t *testing.T) {
+	base := "/repo"
+	roots := []Root{
+		{Path: filepath.Join("dev", "vpc"), AbsPath: filepath.Join(base, "dev", "vpc")},
+	}
+
+	// Unlike ChangedRoots which only matches .tf files, dirty detection matches any file.
+	dirty := matchDirtyFiles(roots, base, []string{
+		filepath.Join("dev", "vpc", "README.md"),
+	})
+
+	if len(dirty) != 1 {
+		t.Fatalf("expected 1 dirty root, got %d", len(dirty))
+	}
+}
+
+func TestMatchDirtyFiles_NoMatches(t *testing.T) {
+	base := "/repo"
+	roots := []Root{
+		{Path: filepath.Join("dev", "vpc"), AbsPath: filepath.Join(base, "dev", "vpc")},
+	}
+
+	dirty := matchDirtyFiles(roots, base, []string{
+		filepath.Join("prd", "vpc", "main.tf"),
+	})
+
+	if len(dirty) != 0 {
+		t.Fatalf("expected 0 dirty roots, got %d", len(dirty))
+	}
+}
+
+func TestMatchDirtyFiles_NoDuplicates(t *testing.T) {
+	base := "/repo"
+	roots := []Root{
+		{Path: filepath.Join("dev", "vpc"), AbsPath: filepath.Join(base, "dev", "vpc")},
+	}
+
+	dirty := matchDirtyFiles(roots, base, []string{
+		filepath.Join("dev", "vpc", "main.tf"),
+		filepath.Join("dev", "vpc", "vars.tf"),
+		filepath.Join("dev", "vpc", "notes.md"),
+	})
+
+	if len(dirty) != 1 {
+		t.Fatalf("expected 1 dirty root, got %d", len(dirty))
+	}
+}
+
 func TestPathContains(t *testing.T) {
 	tests := []struct {
 		parent, child string

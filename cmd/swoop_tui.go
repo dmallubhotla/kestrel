@@ -23,7 +23,7 @@ const (
 	phasePickAction
 )
 
-var swoopActions = []string{"plan", "init", "apply"}
+var swoopActions = []string{"plan", "init", "apply", "edit"}
 
 // swoopTUIModel is the bubbletea model for the interactive root picker.
 type swoopTUIModel struct {
@@ -94,6 +94,17 @@ func (m swoopTUIModel) updateRootPicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.actionIdx = 0
 		}
 		return m, nil
+
+	case "e":
+		if m.filter == "" && len(m.filtered) > 0 {
+			m.result = swoopAction{root: m.filtered[m.cursor], action: "edit"}
+			return m, tea.Quit
+		}
+	case "c":
+		if m.filter == "" && len(m.filtered) > 0 {
+			m.result = swoopAction{root: m.filtered[m.cursor], action: "cd"}
+			return m, tea.Quit
+		}
 
 	case "backspace", "ctrl+h":
 		if len(m.filter) > 0 {
@@ -187,7 +198,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 		// Pre-compute row data for column width calculation.
 		type tuiRow struct {
 			path, profile, ver, activity string
-			initialized                  bool
+			initialized, dirty           bool
 		}
 		rows := make([]tuiRow, end-start)
 		maxPath, maxProfile, maxVer := 0, 0, 0
@@ -196,6 +207,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 			row := tuiRow{
 				path:        r.Path,
 				initialized: r.Initialized,
+				dirty:       r.GitDirty,
 				ver:         "-",
 				activity:    lastActivityStr(m.state, r.Path),
 			}
@@ -235,6 +247,11 @@ func (m swoopTUIModel) viewRootPicker() string {
 				init = swoopGreenStyle.Render("✓")
 			}
 
+			dirty := " "
+			if row.dirty {
+				dirty = swoopWarnStyle.Render("*")
+			}
+
 			paddedPath := fmt.Sprintf("%-*s", maxPath, row.path)
 			profileTag := fmt.Sprintf("[%s]", row.profile)
 			paddedProfile := fmt.Sprintf("%-*s", maxProfile, profileTag)
@@ -250,9 +267,10 @@ func (m swoopTUIModel) viewRootPicker() string {
 				activity = swoopDimStyle.Render(activity)
 			}
 
-			line := fmt.Sprintf("%s%s %s  %s  %s  %s",
+			line := fmt.Sprintf("%s%s%s %s  %s  %s  %s",
 				cursor,
 				init,
+				dirty,
 				paddedPath,
 				paddedProfile,
 				ver,
@@ -276,7 +294,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(swoopHelpStyle.Render("enter: select · esc: quit · type to filter"))
+	b.WriteString(swoopHelpStyle.Render("enter: select · e: edit · c: cd · esc: quit · type to filter"))
 	b.WriteString("\n")
 
 	return b.String()
@@ -380,6 +398,7 @@ var (
 	swoopSelectedStyle = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
 	swoopDimStyle      = lipgloss.NewStyle().Foreground(colorDim)
 	swoopGreenStyle    = lipgloss.NewStyle().Foreground(colorSuccess)
+	swoopWarnStyle     = lipgloss.NewStyle().Foreground(colorWarn)
 	swoopFilterDim     = lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 	swoopHelpStyle     = lipgloss.NewStyle().Foreground(colorHelp)
 	swoopPreviewHead   = lipgloss.NewStyle().Bold(true).Foreground(colorAccent)
