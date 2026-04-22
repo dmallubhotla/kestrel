@@ -72,6 +72,67 @@ directories:
 	}
 }
 
+func TestLoadFile_SwoopConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	os.WriteFile(path, []byte(`
+swoop:
+  cd_mode: pushd
+  editor: nvim
+  auto_install_tf: true
+  sort_order: alpha
+`), 0o644)
+
+	cfg, err := loadFile(path)
+	if err != nil {
+		t.Fatalf("loadFile: %v", err)
+	}
+
+	if cfg.Swoop.CDMode != "pushd" {
+		t.Errorf("Swoop.CDMode = %q, want %q", cfg.Swoop.CDMode, "pushd")
+	}
+	if cfg.Swoop.Editor != "nvim" {
+		t.Errorf("Swoop.Editor = %q, want %q", cfg.Swoop.Editor, "nvim")
+	}
+	if !cfg.Swoop.AutoInstallTF {
+		t.Error("Swoop.AutoInstallTF should be true")
+	}
+	if cfg.Swoop.SortOrder != "alpha" {
+		t.Errorf("Swoop.SortOrder = %q, want %q", cfg.Swoop.SortOrder, "alpha")
+	}
+}
+
+func TestCompose_SwoopFromUser(t *testing.T) {
+	user := &Config{
+		Swoop: SwoopConfig{
+			CDMode:        "pushd",
+			Editor:        "nvim",
+			AutoInstallTF: true,
+			SortOrder:     "alpha",
+		},
+	}
+	project := &Config{
+		Targets: map[string]TargetConfig{
+			"dev": {Cluster: "eks-dev"},
+		},
+	}
+
+	out := compose(user, project)
+
+	if out.Swoop.CDMode != "pushd" {
+		t.Errorf("Swoop.CDMode = %q, want %q", out.Swoop.CDMode, "pushd")
+	}
+	if out.Swoop.Editor != "nvim" {
+		t.Errorf("Swoop.Editor = %q, want %q", out.Swoop.Editor, "nvim")
+	}
+	if !out.Swoop.AutoInstallTF {
+		t.Error("Swoop.AutoInstallTF should be preserved from user config")
+	}
+	if out.Swoop.SortOrder != "alpha" {
+		t.Errorf("Swoop.SortOrder = %q, want %q", out.Swoop.SortOrder, "alpha")
+	}
+}
+
 func TestCompose_ProjectOverridesUser(t *testing.T) {
 	user := &Config{
 		Helm: HelmConfig{Chart: "user-chart", Namespace: "user-ns"},

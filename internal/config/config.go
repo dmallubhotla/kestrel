@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Helm      HelmConfig      `yaml:"helm,omitempty"`
 	Terraform TerraformConfig `yaml:"terraform,omitempty"`
+	Swoop     SwoopConfig     `yaml:"swoop,omitempty"`
 
 	// Targets are named deployment targets for helm (project config, committed).
 	// Each maps a name (= values file) to a cluster.
@@ -62,6 +63,22 @@ type HelmConfig struct {
 
 type TerraformConfig struct {
 	IACDir string `yaml:"iac_dir,omitempty"`
+}
+
+// SwoopConfig holds user preferences for the swoop subsystem.
+type SwoopConfig struct {
+	// CDMode controls which shell command swoop cd emits: "cd" (default) or "pushd".
+	CDMode string `yaml:"cd_mode,omitempty"`
+
+	// Editor overrides $EDITOR for swoop edit. Empty means use $EDITOR.
+	Editor string `yaml:"editor,omitempty"`
+
+	// AutoInstallTF automatically runs tfenv install when a version mismatch
+	// is detected, without prompting. Skipped in CI.
+	AutoInstallTF bool `yaml:"auto_install_tf,omitempty"`
+
+	// SortOrder controls root ordering: "recent" (default) or "alpha".
+	SortOrder string `yaml:"sort_order,omitempty"`
 }
 
 // ResolvedTarget holds the resolved access methods for a target.

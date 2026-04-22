@@ -109,6 +109,15 @@ func discoverRoots(baseDir string) ([]swoop.Root, error) {
 }
 
 func sortRoots(roots []swoop.Root, state *swoop.State) {
+	// Alphabetical-only when configured.
+	if cfg != nil && cfg.Swoop.SortOrder == "alpha" {
+		sort.Slice(roots, func(i, j int) bool {
+			return roots[i].Path < roots[j].Path
+		})
+		return
+	}
+
+	// Default: recency-first ordering.
 	sort.Slice(roots, func(i, j int) bool {
 		ti := lastActivity(state, roots[i].Path)
 		tj := lastActivity(state, roots[j].Path)

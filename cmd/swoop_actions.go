@@ -264,6 +264,16 @@ func handleTFVersionCheck(root swoop.Root) error {
 		return nil // warn but don't block
 	}
 
+	// Auto-install if configured (skip in CI where tfenv use is implicit).
+	if cfg != nil && cfg.Swoop.AutoInstallTF && !guard.IsCI() {
+		fmt.Fprintf(os.Stderr, "  auto-installing terraform %s via tfenv...\n\n", check.Required)
+		if err := swoop.InstallTFVersion(check.Required); err != nil {
+			return fmt.Errorf("tfenv install failed: %w", err)
+		}
+		fmt.Fprintln(os.Stderr)
+		return nil
+	}
+
 	installCmd := swoop.FormatTFVersionCommand(check.Required)
 	fmt.Fprintf(os.Stderr, "\n  %s\n\n", installCmd)
 	fmt.Fprintf(os.Stderr, "Install now? [y/N] ")
