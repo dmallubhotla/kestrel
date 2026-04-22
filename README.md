@@ -37,31 +37,36 @@ Kest uses two config files.
 This lives on your machine and maps AWS account IDs to profiles, and cluster names to kube contexts:
 
 ```yaml
-accounts:
-  "585912155334":
-    aws_profile: dev-sso
-  "593671994769":
-    aws_profile: prd-sso
+aws:
+  accounts:
+    "585912155334":
+      aws_profile: dev-sso
+    "593671994769":
+      aws_profile: prd-sso
+  auto_sso_login: true          # auto aws sso login on expired sessions
 
-contexts:
-  eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
-  eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
-  kind-local: kind-local
+kubernetes:
+  contexts:
+    eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
+    eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
+    kind-local: kind-local
 ```
 
 You can also set behavioral preferences:
 
 ```yaml
-auto_sso_login: true        # auto aws sso login on expired sessions
+terraform:
+  auto_install_tfenv: true      # auto tfenv install on version mismatch (no prompt)
+  write_version: true           # write .terraform-version if missing
+  default_version: "1.9.2"     # version to pin (omit to detect from active terraform)
 
 swoop:
-  auto_install_tf: true     # auto tfenv install on version mismatch (no prompt)
-  cd_mode: pushd            # "cd" (default) or "pushd" for swoop cd
-  editor: nvim              # override $EDITOR for swoop edit
-  sort_order: recent        # "recent" (default) or "alpha"
+  cd_mode: pushd                # "cd" (default) or "pushd" for swoop cd
+  editor: nvim                  # override $EDITOR for swoop edit
+  sort_order: recent            # "recent" (default) or "alpha"
 ```
 
-All swoop settings are optional and have sensible defaults (cd, $EDITOR, no auto-install, recency-first ordering).
+All settings are optional and have sensible defaults.
 
 You can generate the accounts/contexts automatically with `kest config autoconfigure`, which scans your `~/.aws/config` and `~/.kube/config` and walks you through a TUI to pick what you want.
 
@@ -160,6 +165,87 @@ kest config paths       # where config files are (and if they loaded)
 kest config show        # merged config as YAML
 kest config targets     # list all targets with resolved context/profile
 kest config accounts    # list account ID mappings
+```
+
+## Full config reference
+
+### Global config (`~/.config/kest/config.yaml`) — all fields with defaults
+
+```yaml
+# --- AWS ---
+aws:
+  # Map AWS account IDs to profile names from ~/.aws/config.
+  accounts:
+    # "123456789012":
+    #   aws_profile: my-profile
+  # Automatically run `aws sso login` when a session is expired.
+  # Skipped in CI. Default: false.
+  auto_sso_login: false
+
+# --- Kubernetes ---
+kubernetes:
+  # Map short cluster names to full kube context strings.
+  contexts:
+    # eks-dev: arn:aws:eks:us-east-1:123456789012:cluster/eks-dev
+    # kind-local: kind-local
+
+# --- Terraform execution ---
+terraform:
+  # Automatically run `tfenv install` when the active terraform version
+  # doesn't match .terraform-version. Skipped in CI. Default: false.
+  auto_install_tfenv: false
+  # Write a .terraform-version file into roots that lack one before
+  # running init/plan/apply. Default: false.
+  write_version: false
+  # Version to write when write_version is enabled. If empty, the
+  # currently active terraform version is detected. Default: "" (detect).
+  default_version: ""
+
+# --- Swoop (interactive terraform root browser) ---
+swoop:
+  # Shell command for `swoop cd`: "cd" or "pushd". Default: "cd".
+  cd_mode: cd
+  # Editor for `swoop edit`. Empty means use $EDITOR. Default: "".
+  editor: ""
+  # Root ordering: "git" (dirty-first + recency), "recent", or "alpha".
+  # Default: "git".
+  sort_order: git
+```
+
+### Project config (`.kestconfig`) — all fields with defaults
+
+```yaml
+# --- Helm ---
+helm:
+  # OCI chart reference. Required for helm deploys.
+  chart: ""
+  # Directory containing values files (shared.yaml, <target>.yaml).
+  values_dir: ""
+  # Helm release name. Required for helm deploys.
+  release_name: ""
+  # Kubernetes namespace. Default: "app".
+  namespace: app
+  # Scripts to run after helm deploy (relative to project root).
+  deploy_scripts: []
+
+# --- Terraform ---
+terraform:
+  # Path to IaC directory (for `kest terraform` proxy). Default: "".
+  iac_dir: ""
+  # default_version can also be set here to pin per-project. Default: "".
+  default_version: ""
+
+# --- Targets (helm deployment targets) ---
+targets:
+  # dev:
+  #   cluster: eks-dev
+  # prod:
+  #   cluster: eks-prd
+
+# --- Directories (swoop: top-level dir → AWS account ID) ---
+directories:
+  # prd: "593671994769"
+  # dev: "585912155334"
 ```
 
 ## How resolution works
