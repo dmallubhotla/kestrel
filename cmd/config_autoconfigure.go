@@ -225,10 +225,56 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	// Clean config for writing: only accounts and contexts.
+	// --- Preferences ---
+	fmt.Println("Preferences")
+	fmt.Println()
+
+	// auto_sso_login
+	global.AWS.AutoSSOLogin, err = boolPrompt("Auto SSO login on expired sessions?", global.AWS.AutoSSOLogin)
+	if err != nil {
+		return err
+	}
+
+	// terraform preferences (only if terraform/tfenv available)
+	if toolExists("terraform") {
+		global.Terraform.AutoInstallTfenv, err = boolPrompt("Auto-install terraform via tfenv on version mismatch?", global.Terraform.AutoInstallTfenv)
+		if err != nil {
+			return err
+		}
+
+		global.Terraform.WriteVersion, err = boolPrompt("Write .terraform-version into roots that lack one?", global.Terraform.WriteVersion)
+		if err != nil {
+			return err
+		}
+
+		if global.Terraform.WriteVersion {
+			global.Terraform.DefaultVersion, err = defaultVersionPrompt(global.Terraform.DefaultVersion)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// swoop sort order
+	global.Swoop.SortOrder, err = choicePrompt("Swoop sort order", []string{"git", "recent", "alpha"}, global.Swoop.SortOrder, "git")
+	if err != nil {
+		return err
+	}
+
+	// swoop cd mode
+	global.Swoop.CDMode, err = choicePrompt("Swoop cd mode", []string{"cd", "pushd"}, global.Swoop.CDMode, "cd")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+
+	// Assemble config for writing, preserving all sections.
 	toWrite := &config.Config{
 		AWS:        global.AWS,
 		Kubernetes: global.Kubernetes,
+		Terraform:  global.Terraform,
+		Swoop:      global.Swoop,
 	}
 
 	for {
@@ -353,6 +399,139 @@ func formatContextPreview(c kubeconfig.Context) string {
 		fmt.Fprintf(&b, "%s = %s\n", acPreviewKey.Render("namespace"), c.Namespace)
 	}
 	return b.String()
+}
+
+// boolPrompt asks a yes/no question using the single-select TUI.
+func boolPrompt(title string, current bool) (bool, error) {
+	preselect := 0 // No
+	if current {
+		preselect = 1 // Yes
+	}
+	m := singleSelectModel{
+		title:  title,
+		cursor: preselect,
+		items: []selectItem{
+			{name: "No"},
+			{name: "Yes"},
+		},
+	}
+	result, err := runTUI(m)
+	if err != nil {
+		return current, err
+	}
+	sm := result.(singleSelectModel)
+	if sm.cancelled {
+		return current, fmt.Errorf("cancelled")
+	}
+	chosen := sm.cursor == 1
+	label := "no"
+	if chosen {
+		label = "yes"
+	}
+	fmt.Printf("  %s: %s\n", title, label)
+	return chosen, nil
+}
+
+// choicePrompt asks the user to pick from a list of string options.
+func choicePrompt(title string, options []string, current, defaultVal string) (string, error) {
+	if current == "" {
+		current = defaultVal
+	}
+	preselect := 0
+	items := make([]selectItem, len(options))
+	for i, opt := range options {
+		label := opt
+		if opt == defaultVal {
+			label += " (default)"
+		}
+		items[i] = selectItem{name: label}
+		if opt == current {
+			preselect = i
+		}
+	}
+	m := singleSelectModel{
+		title:  title,
+		cursor: preselect,
+		items:  items,
+	}
+	result, err := runTUI(m)
+	if err != nil {
+		return current, err
+	}
+	sm := result.(singleSelectModel)
+	if sm.cancelled {
+		return current, fmt.Errorf("cancelled")
+	}
+	chosen := options[sm.cursor]
+	fmt.Printf("  %s: %s\n", title, chosen)
+	// Return empty string for default so it gets omitted from YAML.
+	if chosen == defaultVal {
+		return "", nil
+	}
+	return chosen, nil
+}
+
+// defaultVersionPrompt asks the user to pick a default terraform version.
+// Detects the currently active version and offers it alongside "(none)".
+func defaultVersionPrompt(current string) (string, error) {
+	items := []selectItem{{name: "(detect at runtime)"}}
+	preselect := 0
+
+	// Detect active terraform version.
+	if out, err := exec.Command("terraform", "version").Output(); err == nil {
+		if v := parseTFVersionOutput(string(out)); v != "" {
+			items = append(items, selectItem{name: v})
+			if current == v {
+				preselect = 1
+			}
+		}
+	}
+
+	// If current is set but not the detected version, add it too.
+	if current != "" && preselect == 0 {
+		for i, item := range items {
+			if item.name == current {
+				preselect = i
+				break
+			}
+		}
+		if preselect == 0 {
+			items = append(items, selectItem{name: current})
+			preselect = len(items) - 1
+		}
+	}
+
+	m := singleSelectModel{
+		title:  "Default terraform version for .terraform-version",
+		cursor: preselect,
+		items:  items,
+	}
+	result, err := runTUI(m)
+	if err != nil {
+		return current, err
+	}
+	sm := result.(singleSelectModel)
+	if sm.cancelled {
+		return current, fmt.Errorf("cancelled")
+	}
+	if sm.cursor == 0 {
+		fmt.Println("  default_version: (detect at runtime)")
+		return "", nil
+	}
+	chosen := items[sm.cursor].name
+	fmt.Printf("  default_version: %s\n", chosen)
+	return chosen, nil
+}
+
+// parseTFVersionOutput extracts the version from `terraform version` output.
+func parseTFVersionOutput(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Terraform v") {
+			return strings.TrimPrefix(line, "Terraform v")
+		}
+	}
+	return ""
 }
 
 func runTUI(m tea.Model) (tea.Model, error) {

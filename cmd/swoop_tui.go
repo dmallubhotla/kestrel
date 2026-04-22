@@ -198,7 +198,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 		// Pre-compute row data for column width calculation.
 		type tuiRow struct {
 			path, dirTag, ver, activity string
-			initialized, dirty         bool
+			initialized, dirty          bool
 		}
 		rows := make([]tuiRow, end-start)
 		maxPath, maxDirTag, maxVer := 0, 0, 0

@@ -39,7 +39,7 @@ func Discover(baseDir string) ([]Root, error) {
 			root := Root{
 				Path:        rel,
 				AbsPath:     path,
-				Dir:     extractDir(rel),
+				Dir:         extractDir(rel),
 				TFVersion:   readTFVersion(path),
 				Initialized: isInitialized(path),
 			}

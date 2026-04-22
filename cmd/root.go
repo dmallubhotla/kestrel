@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	environment string
-	verbose     bool
-	force       bool
-	cfg         *config.Config
-	logCleanup  func()
+	environment      string
+	verbose          bool
+	force            bool
+	globalConfigPath string
+	cfg              *config.Config
+	logCleanup       func()
 )
 
 var rootCmd = &cobra.Command{
@@ -31,6 +32,10 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "warning: could not initialize logging: %v\n", err)
 		} else {
 			logCleanup = cleanup
+		}
+
+		if globalConfigPath != "" {
+			config.SetGlobalConfigPath(globalConfigPath)
 		}
 
 		cfg, err = config.Load()
@@ -86,6 +91,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&environment, "environment", "e", "", "target environment (dev, stage, prod)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose/debug output")
 	rootCmd.PersistentFlags().BoolVar(&force, "force", false, "bypass all safety guards (CI-only, clean worktree, branch restrictions)")
+	rootCmd.PersistentFlags().StringVar(&globalConfigPath, "config", "", "override global config path (default: ~/.config/kest/config.yaml)")
 
 	rootCmd.RegisterFlagCompletionFunc("environment", completeTargetNames)
 }

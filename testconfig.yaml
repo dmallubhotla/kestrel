@@ -1,0 +1,26 @@
+terraform:
+    write_version: true
+    auto_install_tfenv: true
+aws:
+    accounts:
+        "096663958928":
+            aws_profile: arv
+        "464706647583":
+            aws_profile: example-prd
+        "585912155334":
+            aws_profile: dev
+        "593671994769":
+            aws_profile: prd
+        "732277778391":
+            aws_profile: dr
+        "797974634976":
+            aws_profile: example-dev
+    auto_sso_login: true
+kubernetes:
+    contexts:
+        eks-ci: arn:aws:eks:us-east-1:593671994769:cluster/eks-ci
+        eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
+        eks-dr: arn:aws:eks:us-west-2:732277778391:cluster/eks-dr
+        eks-prod: arn:aws:eks:us-east-1:593671994769:cluster/eks-prod
+        eks-stage: arn:aws:eks:us-east-1:593671994769:cluster/eks-stage
+        kind-local: kind-local

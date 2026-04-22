@@ -110,9 +110,22 @@ const (
 	globalFileName = "config.yaml"
 )
 
+// globalPathOverride, when non-empty, replaces the XDG-derived global config path.
+var globalPathOverride string
+
+// SetGlobalConfigPath overrides the default global config path.
+// Pass "" to reset to the default XDG path.
+func SetGlobalConfigPath(path string) {
+	globalPathOverride = path
+}
+
 // GlobalConfigPath returns the expected path for the global config file:
-// $XDG_CONFIG_HOME/kest/config.yaml (typically ~/.config/kest/config.yaml).
+// $XDG_CONFIG_HOME/kest/config.yaml (typically ~/.config/kest/config.yaml),
+// unless overridden via SetGlobalConfigPath.
 func GlobalConfigPath() string {
+	if globalPathOverride != "" {
+		return globalPathOverride
+	}
 	return filepath.Join(xdg.ConfigHome, appName, globalFileName)
 }
 
