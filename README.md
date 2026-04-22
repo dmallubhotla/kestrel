@@ -134,7 +134,7 @@ For repos with lots of terraform roots, swoop discovers them automatically by wa
 ```sh
 kest swoop                      # interactive TUI picker
 kest swoop list                 # list all roots
-kest swoop list --profile prd   # filter by AWS profile
+kest swoop list --dir prd       # filter by top-level directory
 kest swoop plan "live/dev/*"    # glob targeting
 kest swoop plan infra           # substring match
 kest swoop plan --changed       # only roots with git changes

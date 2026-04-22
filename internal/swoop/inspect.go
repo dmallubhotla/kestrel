@@ -9,53 +9,53 @@ import (
 	"strings"
 )
 
-// ProfileInfo summarizes a discovered profile directory.
-type ProfileInfo struct {
-	// Name is the profile directory name (e.g. "dev", "prd").
+// DirInfo summarizes a discovered top-level directory.
+type DirInfo struct {
+	// Name is the directory name (e.g. "dev", "prd").
 	Name string
 
-	// RootCount is the number of terraform roots under this profile.
+	// RootCount is the number of terraform roots under this directory.
 	RootCount int
 
 	// AccountIDs are AWS account IDs found in allowed_account_ids within roots.
 	AccountIDs []string
 }
 
-// InspectProfiles analyzes discovered roots and returns profile summaries
+// InspectDirs analyzes discovered roots and returns directory summaries
 // with extracted AWS account IDs from provider blocks and HCL files.
 // baseDir is the discovery root — ancestor scanning stops here.
-func InspectProfiles(roots []Root, baseDir string) []ProfileInfo {
+func InspectDirs(roots []Root, baseDir string) []DirInfo {
 	absBase, _ := filepath.Abs(baseDir)
 
-	byProfile := make(map[string]*ProfileInfo)
+	byDir := make(map[string]*DirInfo)
 
 	for _, r := range roots {
-		pi, ok := byProfile[r.Profile]
+		di, ok := byDir[r.Dir]
 		if !ok {
-			pi = &ProfileInfo{Name: r.Profile}
-			byProfile[r.Profile] = pi
+			di = &DirInfo{Name: r.Dir}
+			byDir[r.Dir] = di
 		}
-		pi.RootCount++
+		di.RootCount++
 
 		// Try to extract account IDs from this root's .tf and .hcl files.
 		for _, id := range extractAccountIDs(r.AbsPath) {
-			if !contains(pi.AccountIDs, id) {
-				pi.AccountIDs = append(pi.AccountIDs, id)
+			if !contains(di.AccountIDs, id) {
+				di.AccountIDs = append(di.AccountIDs, id)
 			}
 		}
 
 		// Walk up ancestor directories (up to baseDir) for HCL account IDs.
 		// Centralized repos often define the account ID in a parent terragrunt.hcl.
 		for _, id := range extractAncestorAccountIDs(r.AbsPath, absBase) {
-			if !contains(pi.AccountIDs, id) {
-				pi.AccountIDs = append(pi.AccountIDs, id)
+			if !contains(di.AccountIDs, id) {
+				di.AccountIDs = append(di.AccountIDs, id)
 			}
 		}
 	}
 
-	result := make([]ProfileInfo, 0, len(byProfile))
-	for _, pi := range byProfile {
-		result = append(result, *pi)
+	result := make([]DirInfo, 0, len(byDir))
+	for _, di := range byDir {
+		result = append(result, *di)
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name < result[j].Name
@@ -156,7 +156,7 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 
 // EnrichWithAccountIDs sets the AccountID field on each root by scanning
 // the root's own .tf/.hcl files first, then walking ancestors up to baseDir.
-// This avoids profile-level fallback which conflates unrelated roots that
+// This avoids directory-level fallback which conflates unrelated roots that
 // happen to share a top-level directory (e.g. service repos where all roots
 // are under "misc").
 func EnrichWithAccountIDs(roots []Root, baseDir string) {

@@ -197,11 +197,11 @@ func (m swoopTUIModel) viewRootPicker() string {
 
 		// Pre-compute row data for column width calculation.
 		type tuiRow struct {
-			path, profile, ver, activity string
-			initialized, dirty           bool
+			path, dirTag, ver, activity string
+			initialized, dirty         bool
 		}
 		rows := make([]tuiRow, end-start)
-		maxPath, maxProfile, maxVer := 0, 0, 0
+		maxPath, maxDirTag, maxVer := 0, 0, 0
 		for i := start; i < end; i++ {
 			r := m.filtered[i]
 			row := tuiRow{
@@ -214,21 +214,19 @@ func (m swoopTUIModel) viewRootPicker() string {
 			if r.TFVersion != "" {
 				row.ver = r.TFVersion
 			}
-			row.profile = r.Profile
-			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" {
-				if aws != r.Profile {
-					row.profile = fmt.Sprintf("%s→%s", r.Profile, aws)
-				} else {
-					row.profile = aws
-				}
+			// Show dir and AWS profile. Arrow indicates the AWS resolution.
+			tag := r.Dir
+			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" && aws != r.Dir {
+				tag = fmt.Sprintf("%s → %s", r.Dir, aws)
 			}
+			row.dirTag = tag
 			rows[i-start] = row
 			if len(row.path) > maxPath {
 				maxPath = len(row.path)
 			}
-			tag := fmt.Sprintf("[%s]", row.profile)
-			if len(tag) > maxProfile {
-				maxProfile = len(tag)
+			bracketed := fmt.Sprintf("[%s]", row.dirTag)
+			if len(bracketed) > maxDirTag {
+				maxDirTag = len(bracketed)
 			}
 			if len(row.ver) > maxVer {
 				maxVer = len(row.ver)
@@ -253,8 +251,8 @@ func (m swoopTUIModel) viewRootPicker() string {
 			}
 
 			paddedPath := fmt.Sprintf("%-*s", maxPath, row.path)
-			profileTag := fmt.Sprintf("[%s]", row.profile)
-			paddedProfile := fmt.Sprintf("%-*s", maxProfile, profileTag)
+			dirLabel := fmt.Sprintf("[%s]", row.dirTag)
+			paddedDir := fmt.Sprintf("%-*s", maxDirTag, dirLabel)
 			paddedVer := fmt.Sprintf("%-*s", maxVer, row.ver)
 
 			ver := paddedVer
@@ -272,7 +270,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 				init,
 				dirty,
 				paddedPath,
-				paddedProfile,
+				paddedDir,
 				ver,
 				activity,
 			)
@@ -335,7 +333,7 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 		b.WriteString(fmt.Sprintf("  %s %s\n", swoopPreviewKey.Render(key+":"), val))
 	}
 
-	writeField("profile", r.Profile)
+	writeField("dir", r.Dir)
 	if r.AccountID != "" {
 		writeField("account", r.AccountID)
 	}

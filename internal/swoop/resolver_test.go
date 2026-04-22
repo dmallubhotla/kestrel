@@ -8,12 +8,12 @@ import (
 
 func makeRoots() []Root {
 	return []Root{
-		{Path: filepath.Join("dev", "networking", "vpc"), Profile: "dev"},
-		{Path: filepath.Join("dev", "networking", "route53"), Profile: "dev"},
-		{Path: filepath.Join("dev", "data-stores", "fhr-db"), Profile: "dev"},
-		{Path: filepath.Join("prd", "us-east-1", "prod", "vpc"), Profile: "prd"},
-		{Path: filepath.Join("prd", "us-east-1", "stage", "vpc"), Profile: "prd"},
-		{Path: filepath.Join("dr", "networking", "vpc"), Profile: "dr"},
+		{Path: filepath.Join("dev", "networking", "vpc"), Dir: "dev"},
+		{Path: filepath.Join("dev", "networking", "route53"), Dir: "dev"},
+		{Path: filepath.Join("dev", "data-stores", "fhr-db"), Dir: "dev"},
+		{Path: filepath.Join("prd", "us-east-1", "prod", "vpc"), Dir: "prd"},
+		{Path: filepath.Join("prd", "us-east-1", "stage", "vpc"), Dir: "prd"},
+		{Path: filepath.Join("dr", "networking", "vpc"), Dir: "dr"},
 	}
 }
 
@@ -76,26 +76,26 @@ func TestResolve_NoMatch(t *testing.T) {
 	}
 }
 
-func TestResolveByProfile(t *testing.T) {
+func TestResolveByDir(t *testing.T) {
 	roots := makeRoots()
-	matches := ResolveByProfile(roots, "dev")
+	matches := ResolveByDir(roots, "dev")
 
 	if len(matches) != 3 {
 		t.Fatalf("got %d matches, want 3", len(matches))
 	}
 	for _, m := range matches {
-		if m.Profile != "dev" {
-			t.Errorf("got profile %q, want %q", m.Profile, "dev")
+		if m.Dir != "dev" {
+			t.Errorf("got dir %q, want %q", m.Dir, "dev")
 		}
 	}
 }
 
 func TestResolve_FuzzySegment(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("dev", "services", "gha-runners"), Profile: "dev"},
-		{Path: filepath.Join("dev", "networking", "vpc"), Profile: "dev"},
-		{Path: filepath.Join("prd", "services", "gha-runners"), Profile: "prd"},
-		{Path: filepath.Join("dev", "data-stores", "fhr-db"), Profile: "dev"},
+		{Path: filepath.Join("dev", "services", "gha-runners"), Dir: "dev"},
+		{Path: filepath.Join("dev", "networking", "vpc"), Dir: "dev"},
+		{Path: filepath.Join("prd", "services", "gha-runners"), Dir: "prd"},
+		{Path: filepath.Join("dev", "data-stores", "fhr-db"), Dir: "dev"},
 	}
 
 	// "dev/gha" should NOT match via substring (literal "dev/gha" not in path),
@@ -111,9 +111,9 @@ func TestResolve_FuzzySegment(t *testing.T) {
 
 func TestResolve_FuzzySegmentMultiple(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("dev", "services", "gha-runners"), Profile: "dev"},
-		{Path: filepath.Join("prd", "services", "gha-runners"), Profile: "prd"},
-		{Path: filepath.Join("dev", "networking", "vpc"), Profile: "dev"},
+		{Path: filepath.Join("dev", "services", "gha-runners"), Dir: "dev"},
+		{Path: filepath.Join("prd", "services", "gha-runners"), Dir: "prd"},
+		{Path: filepath.Join("dev", "networking", "vpc"), Dir: "dev"},
 	}
 
 	// "gha" alone matches via substring, but "services/gha" should fuzzy-match both.
@@ -134,7 +134,7 @@ func TestResolve_FuzzySegmentNoMatch(t *testing.T) {
 
 func TestResolve_FuzzySegmentOrder(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("alpha", "beta", "gamma"), Profile: "dev"},
+		{Path: filepath.Join("alpha", "beta", "gamma"), Dir: "dev"},
 	}
 	// Segments must match in order: "gamma/alpha" should not match.
 	matches := Resolve(roots, filepath.Join("gamma", "alpha"))
@@ -145,7 +145,7 @@ func TestResolve_FuzzySegmentOrder(t *testing.T) {
 
 func TestResolve_FuzzySegmentCaseInsensitive(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("Dev", "Services", "GHA-Runners"), Profile: "dev"},
+		{Path: filepath.Join("Dev", "Services", "GHA-Runners"), Dir: "dev"},
 	}
 	matches := Resolve(roots, filepath.Join("dev", "gha"))
 	if len(matches) != 1 {
@@ -175,7 +175,7 @@ func TestResolveWithType_SubstringReturnsMatchSubstring(t *testing.T) {
 
 func TestResolveWithType_FuzzyReturnsMatchFuzzy(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("dev", "services", "gha-runners"), Profile: "dev"},
+		{Path: filepath.Join("dev", "services", "gha-runners"), Dir: "dev"},
 	}
 	matches, mt := ResolveWithType(roots, filepath.Join("dev", "gha"))
 	if mt != MatchFuzzy {

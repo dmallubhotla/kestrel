@@ -18,7 +18,7 @@ func TestResolveAWSProfile_DirectoryMapping(t *testing.T) {
 		},
 	}
 
-	root := Root{Profile: "prd"}
+	root := Root{Dir: "prd"}
 	got := ResolveAWSProfile(root, cfg, "")
 	if got != "prd-sso" {
 		t.Errorf("got %q, want %q", got, "prd-sso")
@@ -32,7 +32,7 @@ func TestResolveAWSProfile_AccountIDOnRoot(t *testing.T) {
 		},
 	}
 
-	root := Root{Profile: "dev", AccountID: "585912155334"}
+	root := Root{Dir: "dev", AccountID: "585912155334"}
 	got := ResolveAWSProfile(root, cfg, "")
 	if got != "dev-sso" {
 		t.Errorf("got %q, want %q", got, "dev-sso")
@@ -51,7 +51,7 @@ func TestResolveAWSProfile_DirectoryOverridesAutoDiscovery(t *testing.T) {
 	}
 
 	// Root auto-discovered a different account, but directory mapping wins.
-	root := Root{Profile: "global", AccountID: "111111111111"}
+	root := Root{Dir: "global", AccountID: "111111111111"}
 	got := ResolveAWSProfile(root, cfg, "")
 	if got != "prd-sso" {
 		t.Errorf("got %q, want %q", got, "prd-sso")
@@ -59,7 +59,7 @@ func TestResolveAWSProfile_DirectoryOverridesAutoDiscovery(t *testing.T) {
 }
 
 func TestResolveAWSProfile_NilConfig(t *testing.T) {
-	root := Root{Profile: "dev"}
+	root := Root{Dir: "dev"}
 	got := ResolveAWSProfile(root, nil, "")
 	if got != "" {
 		t.Errorf("got %q, want empty", got)
@@ -72,7 +72,7 @@ func TestResolveAWSProfile_NoMatch(t *testing.T) {
 			"585912155334": {AwsProfile: "dev-sso"},
 		},
 	}
-	root := Root{Profile: "unknown"}
+	root := Root{Dir: "unknown"}
 	got := ResolveAWSProfile(root, cfg, "")
 	if got != "" {
 		t.Errorf("got %q, want empty", got)
@@ -92,7 +92,7 @@ func TestResolveAWSProfile_FallsBackToActiveTarget(t *testing.T) {
 		},
 	}
 
-	root := Root{Profile: "unknown"}
+	root := Root{Dir: "unknown"}
 	got := ResolveAWSProfile(root, cfg, "dev")
 	if got != "dev-sso" {
 		t.Errorf("got %q, want %q", got, "dev-sso")
@@ -112,7 +112,7 @@ func TestResolveAWSProfile_MultipleDirsSameAccount(t *testing.T) {
 	}
 
 	for _, profile := range []string{"prd", "ci", "example-prod"} {
-		root := Root{Profile: profile}
+		root := Root{Dir: profile}
 		got := ResolveAWSProfile(root, cfg, "")
 		if got != "prd-sso" {
 			t.Errorf("profile %q: got %q, want %q", profile, got, "prd-sso")

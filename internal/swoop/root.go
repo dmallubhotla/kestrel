@@ -10,9 +10,9 @@ type Root struct {
 	// AbsPath is the absolute filesystem path.
 	AbsPath string
 
-	// Profile is the inferred account profile (top-level directory name).
-	// For service-embedded IaC this may be the environment name (e.g. "dev").
-	Profile string
+	// Dir is the top-level directory name (e.g. "dev", "prd").
+	// For centralized IaC repos this typically maps to an AWS account.
+	Dir string
 
 	// AccountID is the AWS account ID discovered from terraform files.
 	// Set by EnrichWithAccountIDs after discovery + inspection.

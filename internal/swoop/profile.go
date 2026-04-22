@@ -4,7 +4,7 @@ import "github.com/example/kestrel/internal/config"
 
 // ResolveAWSProfile determines the AWS_PROFILE for a root by checking:
 //  1. Explicit directory→account ID mapping in cfg.Directories
-//  2. Account ID from auto-discovery (stored on root by InspectProfiles)
+//  2. Account ID from auto-discovery (stored on root by InspectDirs)
 //  3. Falls back to the active target's AWS profile if provided
 //
 // Account IDs are resolved to AWS profiles via cfg.Accounts.
@@ -14,7 +14,7 @@ func ResolveAWSProfile(root Root, cfg *config.Config, activeTarget string) strin
 	}
 
 	// 1. Explicit directory mapping.
-	if accountID, ok := cfg.Directories[root.Profile]; ok {
+	if accountID, ok := cfg.Directories[root.Dir]; ok {
 		if p := cfg.ResolveAccountProfile(accountID); p != "" {
 			return p
 		}

@@ -60,7 +60,7 @@ func TestDiscover_BasicStructure(t *testing.T) {
 	}
 }
 
-func TestDiscover_ProfileExtraction(t *testing.T) {
+func TestDiscover_DirExtraction(t *testing.T) {
 	base := t.TempDir()
 
 	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
@@ -72,9 +72,9 @@ func TestDiscover_ProfileExtraction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	profiles := make(map[string]string)
+	dirs := make(map[string]string)
 	for _, r := range roots {
-		profiles[r.Path] = r.Profile
+		dirs[r.Path] = r.Dir
 	}
 
 	want := map[string]string{
@@ -82,9 +82,9 @@ func TestDiscover_ProfileExtraction(t *testing.T) {
 		filepath.Join("prd", "vpc"): "prd",
 		filepath.Join("dr", "vpc"):  "dr",
 	}
-	for path, wantProfile := range want {
-		if got := profiles[path]; got != wantProfile {
-			t.Errorf("profile for %q = %q, want %q", path, got, wantProfile)
+	for path, wantDir := range want {
+		if got := dirs[path]; got != wantDir {
+			t.Errorf("dir for %q = %q, want %q", path, got, wantDir)
 		}
 	}
 }
@@ -198,10 +198,10 @@ func TestDiscover_ServiceEmbeddedLayout(t *testing.T) {
 		t.Fatalf("got %d roots, want 3: %v", len(roots), rootPaths(roots))
 	}
 
-	// Profile should be "live" for all (first path component).
+	// Dir should be "live" for all (first path component).
 	for _, r := range roots {
-		if r.Profile != "live" {
-			t.Errorf("profile for %q = %q, want %q", r.Path, r.Profile, "live")
+		if r.Dir != "live" {
+			t.Errorf("dir for %q = %q, want %q", r.Path, r.Dir, "live")
 		}
 	}
 }

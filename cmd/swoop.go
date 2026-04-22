@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var swoopProfile string
+var swoopDir string
 
 var swoopCmd = &cobra.Command{
 	Use:     "swoop",
@@ -32,7 +32,7 @@ var swoopListCmd = &cobra.Command{
 	Long: `Discover and display all terraform roots in the project.
 
 Optionally provide a target to filter results (exact path, glob, or substring).
-Use --profile to filter by account profile directory.`,
+Use --dir to filter by top-level directory.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		baseDir, err := resolveBaseDir()
@@ -51,8 +51,8 @@ Use --profile to filter by account profile directory.`,
 		}
 
 		// Apply filters.
-		if swoopProfile != "" {
-			roots = swoop.ResolveByProfile(roots, swoopProfile)
+		if swoopDir != "" {
+			roots = swoop.ResolveByDir(roots, swoopDir)
 		}
 		if len(args) > 0 {
 			roots = swoop.Resolve(roots, args[0])
@@ -186,7 +186,7 @@ func compareRecent(a, b swoop.Root, state *swoop.State) bool {
 
 func printRootTable(roots []swoop.Root, state *swoop.State) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ROOT\tPROFILE\tAWS PROFILE\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY")
+	fmt.Fprintln(w, "ROOT\tDIR\tAWS\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY")
 
 	for _, r := range roots {
 		init := "-"
@@ -211,7 +211,7 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 			aws = "-"
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Profile, aws, ver, init, dirty, activity)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Dir, aws, ver, init, dirty, activity)
 	}
 	w.Flush()
 
@@ -262,9 +262,9 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	swoopListCmd.Flags().StringVar(&swoopProfile, "profile", "", "filter by account profile directory")
+	swoopListCmd.Flags().StringVar(&swoopDir, "dir", "", "filter by top-level directory")
 	swoopListCmd.ValidArgsFunction = completeSwoopRoots
-	swoopListCmd.RegisterFlagCompletionFunc("profile", completeSwoopProfiles)
+	swoopListCmd.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
 
 	swoopCmd.AddCommand(swoopListCmd)
 	rootCmd.AddCommand(swoopCmd)

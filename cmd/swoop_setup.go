@@ -62,10 +62,10 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Directories: %s\n", strings.Join(layout.EnvNames, ", "))
 
 	// Step 3: Inspect roots for account IDs.
-	profiles := swoop.InspectProfiles(roots, projectRoot)
+	dirInfos := swoop.InspectDirs(roots, projectRoot)
 	swoop.EnrichWithAccountIDs(roots, projectRoot)
 
-	for _, p := range profiles {
+	for _, p := range dirInfos {
 		if len(p.AccountIDs) > 0 {
 			fmt.Printf("  Account IDs in %s: %s\n", p.Name, strings.Join(p.AccountIDs, ", "))
 		}
@@ -88,9 +88,9 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Collect account IDs across all profile dirs (for centralized repos).
+	// Collect account IDs across all top-level dirs (for centralized repos).
 	allAccountIDs := make(map[string]string) // dir name → first account ID
-	for _, p := range profiles {
+	for _, p := range dirInfos {
 		if len(p.AccountIDs) > 0 {
 			allAccountIDs[p.Name] = p.AccountIDs[0]
 		}

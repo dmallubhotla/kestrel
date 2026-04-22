@@ -39,7 +39,7 @@ func Discover(baseDir string) ([]Root, error) {
 			root := Root{
 				Path:        rel,
 				AbsPath:     path,
-				Profile:     extractProfile(rel),
+				Dir:     extractDir(rel),
 				TFVersion:   readTFVersion(path),
 				Initialized: isInitialized(path),
 			}
@@ -95,9 +95,9 @@ func fileContainsBackend(path string) bool {
 	return false
 }
 
-// extractProfile returns the first path component, which corresponds to the
-// account profile directory (e.g. "dev", "prd", "dr").
-func extractProfile(relPath string) string {
+// extractDir returns the first path component — the top-level directory
+// (e.g. "dev", "prd", "dr").
+func extractDir(relPath string) string {
 	parts := strings.SplitN(relPath, string(os.PathSeparator), 2)
 	if len(parts) == 0 {
 		return ""

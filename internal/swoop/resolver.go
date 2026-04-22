@@ -122,11 +122,11 @@ func fuzzySegmentMatch(target, rootPath string) bool {
 	return true
 }
 
-// ResolveByProfile returns all roots under the given profile directory.
-func ResolveByProfile(roots []Root, profile string) []Root {
+// ResolveByDir returns all roots under the given top-level directory.
+func ResolveByDir(roots []Root, dir string) []Root {
 	var matches []Root
 	for _, r := range roots {
-		if r.Profile == profile {
+		if r.Dir == dir {
 			matches = append(matches, r)
 		}
 	}

@@ -18,7 +18,7 @@ type Layout struct {
 
 	// EnvNames are the discovered environment names (e.g. ["ci","dev","prod","stage"]).
 	// For service repos these are the dirs under live/.
-	// For centralized repos these are the top-level profile directories.
+	// For centralized repos these are the top-level directories.
 	EnvNames []string
 }
 
@@ -28,8 +28,8 @@ type Layout struct {
 // Service-embedded pattern: roots match <prefix>/live/<env>/ where each root
 // is exactly one level under a "live" directory and <prefix> is the IaC dir.
 //
-// Centralized pattern: roots are organized by top-level account profile
-// directories (dev/, prd/, dr/, etc.) with no common "live" parent.
+// Centralized pattern: roots are organized by top-level directories
+// (dev/, prd/, dr/, etc.) with no common "live" parent.
 func DetectLayout(roots []Root) Layout {
 	// Check if all roots share a common <prefix>/live/<env> pattern.
 	var livePrefix string
@@ -72,21 +72,21 @@ func DetectLayout(roots []Root) Layout {
 		}
 	}
 
-	// Centralized: environments are the top-level (profile) directories.
-	profileSet := make(map[string]bool)
+	// Centralized: environments are the top-level directories.
+	dirSet := make(map[string]bool)
 	for _, r := range roots {
-		profileSet[r.Profile] = true
+		dirSet[r.Dir] = true
 	}
 
 	return Layout{
 		Type:     "centralized",
-		EnvNames: sortedKeys(profileSet),
+		EnvNames: sortedKeys(dirSet),
 	}
 }
 
 // EnvNameFromRoot extracts the environment/target name for a root.
 // For service repos, this is the directory after "live/" in the root path.
-// For centralized repos, this is the top-level profile directory.
+// For centralized repos, this is the top-level directory.
 func (l Layout) EnvNameFromRoot(r Root) string {
 	if l.Type == "service" {
 		parts := strings.Split(r.Path, string(filepath.Separator))
@@ -97,7 +97,7 @@ func (l Layout) EnvNameFromRoot(r Root) string {
 		}
 		return ""
 	}
-	return r.Profile
+	return r.Dir
 }
 
 func sortedKeys(m map[string]bool) []string {

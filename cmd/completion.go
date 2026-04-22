@@ -33,8 +33,8 @@ func completeSwoopRoots(_ *cobra.Command, args []string, _ string) ([]string, co
 	return paths, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeSwoopProfiles returns unique profile directory names for shell completion.
-func completeSwoopProfiles(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+// completeSwoopDirs returns unique top-level directory names for shell completion.
+func completeSwoopDirs(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	baseDir, err := resolveBaseDir()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -44,12 +44,12 @@ func completeSwoopProfiles(_ *cobra.Command, _ []string, _ string) ([]string, co
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	seen := map[string]bool{}
-	var profiles []string
+	var dirs []string
 	for _, r := range roots {
-		if r.Profile != "" && !seen[r.Profile] {
-			seen[r.Profile] = true
-			profiles = append(profiles, r.Profile)
+		if r.Dir != "" && !seen[r.Dir] {
+			seen[r.Dir] = true
+			dirs = append(dirs, r.Dir)
 		}
 	}
-	return profiles, cobra.ShellCompDirectiveNoFileComp
+	return dirs, cobra.ShellCompDirectiveNoFileComp
 }

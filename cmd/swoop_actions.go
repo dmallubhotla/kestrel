@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	swoopChanged       string
-	swoopActionProfile string
+	swoopChanged   string
+	swoopActionDir string
 )
 
 var swoopInitCmd = &cobra.Command{
@@ -27,7 +27,7 @@ If the target matches a single root, it runs immediately.
 If it matches multiple roots (via glob), they run sequentially.
 
 Use --changed to target roots with modified .tf files.
-Use --profile to filter by account profile directory.`,
+Use --dir to filter by top-level directory.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		target := ""
@@ -48,7 +48,7 @@ If the target matches a single root, it runs immediately.
 If it matches multiple roots (via glob), they run sequentially with a summary.
 
 Use --changed to target roots with modified .tf files.
-Use --profile to filter by account profile directory.`,
+Use --dir to filter by top-level directory.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		target := ""
@@ -69,7 +69,7 @@ If the target matches a single root, it runs immediately.
 If it matches multiple roots (via glob), they run sequentially with a summary.
 
 Use --changed to target roots with modified .tf files.
-Use --profile to filter by account profile directory.
+Use --dir to filter by top-level directory.
 
 Apply has additional safety guards:
 - Requires --force when not in CI
@@ -84,7 +84,7 @@ Apply has additional safety guards:
 	},
 }
 
-// runSwoopActionCmd resolves targets (including --changed and --profile flags)
+// runSwoopActionCmd resolves targets (including --changed and --dir flags)
 // and dispatches to single or batch execution.
 func runSwoopActionCmd(action, target string) error {
 	baseDir, err := resolveBaseDir()
@@ -123,21 +123,21 @@ func runSwoopActionCmd(action, target string) error {
 
 	// Multiple roots — batch mode.
 	// For non-glob substring matches that are ambiguous, error out.
-	if !isBatchTarget(target) && swoopChanged == "" && swoopActionProfile == "" {
+	if !isBatchTarget(target) && swoopChanged == "" && swoopActionDir == "" {
 		return ambiguousTargetError(matches, target)
 	}
 
 	return runSwoopBatch(action, matches, baseDir)
 }
 
-// resolveTargets combines target string, --changed, and --profile into a set of roots.
+// resolveTargets combines target string, --changed, and --dir into a set of roots.
 // Returns the matched roots and the match type used for the target resolution.
 func resolveTargets(roots []swoop.Root, baseDir, target string) ([]swoop.Root, swoop.MatchType, error) {
 	matches := roots
 
-	// Filter by profile first.
-	if swoopActionProfile != "" {
-		matches = swoop.ResolveByProfile(matches, swoopActionProfile)
+	// Filter by directory first.
+	if swoopActionDir != "" {
+		matches = swoop.ResolveByDir(matches, swoopActionDir)
 	}
 
 	// Filter by --changed.
@@ -223,7 +223,7 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 
 	// Print context.
 	fmt.Fprintf(os.Stderr, "root:    %s\n", root.Path)
-	fmt.Fprintf(os.Stderr, "profile: %s\n", root.Profile)
+	fmt.Fprintf(os.Stderr, "dir:     %s\n", root.Dir)
 	if awsProfile != "" {
 		fmt.Fprintf(os.Stderr, "aws:     %s\n", awsProfile)
 	}
@@ -556,10 +556,10 @@ func init() {
 		c.Flags().StringVar(&swoopChanged, "changed", "", "target roots with modified .tf files (optionally specify git ref, e.g. --changed=HEAD~3)")
 		// Allow --changed without a value (defaults to "true" meaning "use merge-base").
 		c.Flags().Lookup("changed").NoOptDefVal = "true"
-		c.Flags().StringVar(&swoopActionProfile, "profile", "", "filter by account profile directory")
+		c.Flags().StringVar(&swoopActionDir, "dir", "", "filter by top-level directory")
 
 		c.ValidArgsFunction = completeSwoopRoots
-		c.RegisterFlagCompletionFunc("profile", completeSwoopProfiles)
+		c.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
 	}
 
 	swoopCmd.AddCommand(swoopInitCmd)

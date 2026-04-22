@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestInspectProfiles_BasicCounts(t *testing.T) {
+func TestInspectDirs_BasicCounts(t *testing.T) {
 	base := t.TempDir()
 
 	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
@@ -18,21 +18,21 @@ func TestInspectProfiles_BasicCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	profiles := InspectProfiles(roots, base)
-	if len(profiles) != 2 {
-		t.Fatalf("expected 2 profiles, got %d", len(profiles))
+	dirs := InspectDirs(roots, base)
+	if len(dirs) != 2 {
+		t.Fatalf("expected 2 dirs, got %d", len(dirs))
 	}
 
 	// Sorted alphabetically.
-	if profiles[0].Name != "dev" || profiles[0].RootCount != 2 {
-		t.Errorf("dev: got name=%q count=%d", profiles[0].Name, profiles[0].RootCount)
+	if dirs[0].Name != "dev" || dirs[0].RootCount != 2 {
+		t.Errorf("dev: got name=%q count=%d", dirs[0].Name, dirs[0].RootCount)
 	}
-	if profiles[1].Name != "prd" || profiles[1].RootCount != 1 {
-		t.Errorf("prd: got name=%q count=%d", profiles[1].Name, profiles[1].RootCount)
+	if dirs[1].Name != "prd" || dirs[1].RootCount != 1 {
+		t.Errorf("prd: got name=%q count=%d", dirs[1].Name, dirs[1].RootCount)
 	}
 }
 
-func TestInspectProfiles_AccountIDExtraction(t *testing.T) {
+func TestInspectDirs_AccountIDExtraction(t *testing.T) {
 	base := t.TempDir()
 
 	root := filepath.Join(base, "dev", "vpc")
@@ -56,17 +56,17 @@ provider "aws" {
 		t.Fatal(err)
 	}
 
-	profiles := InspectProfiles(roots, base)
-	if len(profiles) != 1 {
-		t.Fatalf("expected 1 profile, got %d", len(profiles))
+	dirs := InspectDirs(roots, base)
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
 
-	if len(profiles[0].AccountIDs) != 1 || profiles[0].AccountIDs[0] != "585912155334" {
-		t.Errorf("expected account ID 585912155334, got %v", profiles[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "585912155334" {
+		t.Errorf("expected account ID 585912155334, got %v", dirs[0].AccountIDs)
 	}
 }
 
-func TestInspectProfiles_HCLAccountID(t *testing.T) {
+func TestInspectDirs_HCLAccountID(t *testing.T) {
 	base := t.TempDir()
 
 	// Create a terragrunt.hcl at the account level with aws_account_id.
@@ -106,17 +106,17 @@ terraform {
 		t.Fatalf("expected 1 root, got %d", len(roots))
 	}
 
-	profiles := InspectProfiles(roots, base)
-	if len(profiles) != 1 {
-		t.Fatalf("expected 1 profile, got %d", len(profiles))
+	dirs := InspectDirs(roots, base)
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
 
-	if len(profiles[0].AccountIDs) != 1 || profiles[0].AccountIDs[0] != "593671994769" {
-		t.Errorf("expected account ID 593671994769 from ancestor HCL, got %v", profiles[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "593671994769" {
+		t.Errorf("expected account ID 593671994769 from ancestor HCL, got %v", dirs[0].AccountIDs)
 	}
 }
 
-func TestInspectProfiles_HCLInRoot(t *testing.T) {
+func TestInspectDirs_HCLInRoot(t *testing.T) {
 	base := t.TempDir()
 
 	// Root dir has both a .tf backend and a .hcl with account_id.
@@ -140,12 +140,12 @@ inputs = {
 		t.Fatal(err)
 	}
 
-	profiles := InspectProfiles(roots, base)
-	if len(profiles) != 1 {
-		t.Fatalf("expected 1 profile, got %d", len(profiles))
+	dirs := InspectDirs(roots, base)
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
-	if len(profiles[0].AccountIDs) != 1 || profiles[0].AccountIDs[0] != "585912155334" {
-		t.Errorf("expected account ID 585912155334 from HCL in root, got %v", profiles[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "585912155334" {
+		t.Errorf("expected account ID 585912155334 from HCL in root, got %v", dirs[0].AccountIDs)
 	}
 }
 

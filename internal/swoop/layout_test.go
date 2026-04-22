@@ -7,10 +7,10 @@ import (
 
 func TestDetectLayout_ServiceEmbedded(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("misc", "iac", "live", "dev"), Profile: "misc"},
-		{Path: filepath.Join("misc", "iac", "live", "stage"), Profile: "misc"},
-		{Path: filepath.Join("misc", "iac", "live", "prod"), Profile: "misc"},
-		{Path: filepath.Join("misc", "iac", "live", "ci"), Profile: "misc"},
+		{Path: filepath.Join("misc", "iac", "live", "dev"), Dir: "misc"},
+		{Path: filepath.Join("misc", "iac", "live", "stage"), Dir: "misc"},
+		{Path: filepath.Join("misc", "iac", "live", "prod"), Dir: "misc"},
+		{Path: filepath.Join("misc", "iac", "live", "ci"), Dir: "misc"},
 	}
 
 	layout := DetectLayout(roots)
@@ -34,10 +34,10 @@ func TestDetectLayout_ServiceEmbedded(t *testing.T) {
 
 func TestDetectLayout_Centralized(t *testing.T) {
 	roots := []Root{
-		{Path: filepath.Join("dev", "networking", "vpc"), Profile: "dev"},
-		{Path: filepath.Join("dev", "data-stores", "rds"), Profile: "dev"},
-		{Path: filepath.Join("prd", "us-east-1", "prod", "vpc"), Profile: "prd"},
-		{Path: filepath.Join("dr", "networking", "vpc"), Profile: "dr"},
+		{Path: filepath.Join("dev", "networking", "vpc"), Dir: "dev"},
+		{Path: filepath.Join("dev", "data-stores", "rds"), Dir: "dev"},
+		{Path: filepath.Join("prd", "us-east-1", "prod", "vpc"), Dir: "prd"},
+		{Path: filepath.Join("dr", "networking", "vpc"), Dir: "dr"},
 	}
 
 	layout := DetectLayout(roots)
@@ -62,8 +62,8 @@ func TestDetectLayout_Centralized(t *testing.T) {
 func TestDetectLayout_MixedNotService(t *testing.T) {
 	// If some roots have live/ and some don't, it's centralized.
 	roots := []Root{
-		{Path: filepath.Join("misc", "iac", "live", "dev"), Profile: "misc"},
-		{Path: filepath.Join("infra", "networking", "vpc"), Profile: "infra"},
+		{Path: filepath.Join("misc", "iac", "live", "dev"), Dir: "misc"},
+		{Path: filepath.Join("infra", "networking", "vpc"), Dir: "infra"},
 	}
 
 	layout := DetectLayout(roots)
@@ -75,8 +75,8 @@ func TestDetectLayout_MixedNotService(t *testing.T) {
 func TestDetectLayout_DifferentPrefixes(t *testing.T) {
 	// Two different live/ prefixes — not a clean service layout.
 	roots := []Root{
-		{Path: filepath.Join("a", "live", "dev"), Profile: "a"},
-		{Path: filepath.Join("b", "live", "dev"), Profile: "b"},
+		{Path: filepath.Join("a", "live", "dev"), Dir: "a"},
+		{Path: filepath.Join("b", "live", "dev"), Dir: "b"},
 	}
 
 	layout := DetectLayout(roots)
