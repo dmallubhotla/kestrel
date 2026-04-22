@@ -49,7 +49,21 @@ contexts:
   kind-local: kind-local
 ```
 
-You can generate this automatically with `kest config autoconfigure`, which scans your `~/.aws/config` and `~/.kube/config` and walks you through a TUI to pick what you want.
+You can also set behavioral preferences:
+
+```yaml
+auto_sso_login: true        # auto aws sso login on expired sessions
+
+swoop:
+  auto_install_tf: true     # auto tfenv install on version mismatch (no prompt)
+  cd_mode: pushd            # "cd" (default) or "pushd" for swoop cd
+  editor: nvim              # override $EDITOR for swoop edit
+  sort_order: recent        # "recent" (default) or "alpha"
+```
+
+All swoop settings are optional and have sensible defaults (cd, $EDITOR, no auto-install, recency-first ordering).
+
+You can generate the accounts/contexts automatically with `kest config autoconfigure`, which scans your `~/.aws/config` and `~/.kube/config` and walks you through a TUI to pick what you want.
 
 ### Project config (`.kestconfig`)
 
