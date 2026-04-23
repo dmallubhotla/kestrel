@@ -33,7 +33,7 @@ type Config struct {
 type TargetConfig struct {
 	Cluster    string `yaml:"cluster,omitempty"`
 	AWSAccount string `yaml:"aws_account,omitempty"` // 12-digit AWS account ID
-	Region     string `yaml:"region,omitempty"`       // AWS region (e.g. us-east-1)
+	Region     string `yaml:"region,omitempty"`      // AWS region (e.g. us-east-1)
 }
 
 // AWSConfig holds AWS-specific user configuration.

@@ -19,8 +19,8 @@ var (
 	force            bool
 	globalConfigPath string
 	cfg              *config.Config
-	logCleanup     func()
-	execlogCleanup func()
+	logCleanup       func()
+	execlogCleanup   func()
 )
 
 var rootCmd = &cobra.Command{

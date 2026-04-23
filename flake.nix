@@ -56,6 +56,20 @@
               --fish <($out/bin/kest completion fish)
           '';
         };
+        kestci = final.buildGoApplication {
+          pname = "kestci";
+          version = "0.1.0";
+          src = ./.;
+          modules = ./gomod2nix.toml;
+          subPackages = [ "cmd/kestci" ];
+          nativeBuildInputs = [ final.installShellFiles ];
+          postInstall = ''
+            installShellCompletion --cmd kestci \
+              --bash <($out/bin/kestci completion bash) \
+              --zsh <($out/bin/kestci completion zsh) \
+              --fish <($out/bin/kestci completion fish)
+          '';
+        };
       };
     in
     {
@@ -67,6 +81,7 @@
 
       packages = eachSystem (pkgs: {
         default = pkgs.kest;
+        kestci = pkgs.kestci;
       });
 
       formatter = eachSystem (pkgs: treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.wrapper);

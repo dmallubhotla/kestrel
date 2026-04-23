@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/example/kestrel/internal/config"
+	"github.com/example/kestrel/internal/execlog"
 	"github.com/example/kestrel/internal/guard"
 	"github.com/example/kestrel/internal/logging"
-	"github.com/example/kestrel/internal/execlog"
 	"github.com/example/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
