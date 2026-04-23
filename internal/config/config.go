@@ -31,7 +31,9 @@ type Config struct {
 
 // TargetConfig defines a deployment target in project config.
 type TargetConfig struct {
-	Cluster string `yaml:"cluster,omitempty"`
+	Cluster    string `yaml:"cluster,omitempty"`
+	AWSAccount string `yaml:"aws_account,omitempty"` // 12-digit AWS account ID
+	Region     string `yaml:"region,omitempty"`       // AWS region (e.g. us-east-1)
 }
 
 // AWSConfig holds AWS-specific user configuration.
@@ -102,6 +104,9 @@ type SwoopConfig struct {
 type ResolvedTarget struct {
 	KubeContext string
 	AwsProfile  string
+	AccountID   string // raw AWS account ID (for CI, swoop bridging)
+	Region      string // from target config
+	Cluster     string // from target config
 }
 
 const (
@@ -257,8 +262,8 @@ func compose(user, project *Config) *Config {
 // ResolveTarget resolves a target name to kube_context + aws_profile.
 // The target must exist in the Targets map.
 // Kube context is resolved from Contexts map by cluster name.
-// AWS profile is resolved from Accounts map by extracting account ID from the
-// kube context ARN (for EKS contexts).
+// AWS profile is resolved from the target's explicit aws_account field,
+// falling back to extracting account ID from the kube context ARN.
 func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
 	target, ok := c.Targets[name]
 	if !ok {
@@ -266,6 +271,8 @@ func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
 	}
 
 	var resolved ResolvedTarget
+	resolved.Cluster = target.Cluster
+	resolved.Region = target.Region
 
 	if target.Cluster != "" {
 		resolved.KubeContext = c.ResolveClusterContext(target.Cluster)
@@ -275,9 +282,15 @@ func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
 					"  Run 'kest config autoconfigure' or add a contexts entry for %q to %s",
 				name, target.Cluster, target.Cluster, GlobalConfigPath())
 		}
+	}
 
-		// Derive AWS profile from the kube context's account ID.
+	// AWS profile: explicit account takes priority over ARN extraction.
+	if target.AWSAccount != "" {
+		resolved.AccountID = target.AWSAccount
+		resolved.AwsProfile = c.ResolveAccountProfile(target.AWSAccount)
+	} else if resolved.KubeContext != "" {
 		if accountID := ExtractAccountIDFromARN(resolved.KubeContext); accountID != "" {
+			resolved.AccountID = accountID
 			resolved.AwsProfile = c.ResolveAccountProfile(accountID)
 		}
 	}

@@ -72,6 +72,11 @@ var allowedAccountRe = regexp.MustCompile(`allowed_account_ids\s*=\s*\["(\d{12})
 //	account_id     = "123456789012"
 var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 
+// regionRe matches AWS region declarations in provider blocks:
+//
+//	region = "us-east-1"
+var regionRe = regexp.MustCompile(`region\s*=\s*"([a-z]+-[a-z]+-\d+)"`)
+
 // extractAccountIDs scans .tf and .hcl files in a directory for account ID values.
 func extractAccountIDs(dir string) []string {
 	entries, err := os.ReadDir(dir)
@@ -177,6 +182,34 @@ func EnrichWithAccountIDs(roots []Root, baseDir string) {
 		}
 		// If still nothing, leave empty — the root doesn't need AWS.
 	}
+}
+
+// ExtractRegion scans .tf files in a directory for an AWS region declaration.
+// Returns the first region found, or empty string.
+func ExtractRegion(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tf") {
+			continue
+		}
+		f, err := os.Open(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			if m := regionRe.FindStringSubmatch(scanner.Text()); len(m) > 1 {
+				f.Close()
+				return m[1]
+			}
+		}
+		f.Close()
+	}
+	return ""
 }
 
 func contains(ss []string, s string) bool {

@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/example/kestrel/internal/resolve"
 	"github.com/example/kestrel/internal/swoop"
 )
 
@@ -216,7 +217,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 			}
 			// Show dir and AWS profile. Arrow indicates the AWS resolution.
 			tag := r.Dir
-			if aws := swoop.ResolveAWSProfile(r, cfg, environment); aws != "" && aws != r.Dir {
+			if aws := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment); aws != "" && aws != r.Dir {
 				tag = fmt.Sprintf("%s → %s", r.Dir, aws)
 			}
 			row.dirTag = tag
@@ -364,7 +365,7 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 		}
 	}
 
-	awsProfile := swoop.ResolveAWSProfile(r, cfg, environment)
+	awsProfile := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)
 	if awsProfile != "" {
 		writeField("aws", awsProfile)
 	}

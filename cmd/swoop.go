@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/example/kestrel/internal/resolve"
 	"github.com/example/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
@@ -229,7 +230,7 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 
 		activity := lastActivityStr(state, r.Path)
 
-		aws := swoop.ResolveAWSProfile(r, cfg, environment)
+		aws := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)
 		if aws == "" {
 			aws = "-"
 		}

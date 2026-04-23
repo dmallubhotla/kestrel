@@ -71,19 +71,23 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Build per-root account ID map for service repos.
+	// Build per-root account ID and region maps for service repos.
 	// For service layout, the env dir is the part after "live/" in the root path.
 	rootAccountIDs := make(map[string]string) // env name → account ID
+	rootRegions := make(map[string]string)    // env name → AWS region
 	for _, r := range roots {
-		if r.AccountID == "" {
+		envName := layout.EnvNameFromRoot(r)
+		if envName == "" {
 			continue
 		}
-		// For service repos, extract env name from path (e.g., "misc/iac/live/dev" → "dev").
-		envName := layout.EnvNameFromRoot(r)
-		if envName != "" {
-			// Keep first discovered — multiple roots in same env should agree.
+		if r.AccountID != "" {
 			if _, exists := rootAccountIDs[envName]; !exists {
 				rootAccountIDs[envName] = r.AccountID
+			}
+		}
+		if _, exists := rootRegions[envName]; !exists {
+			if region := swoop.ExtractRegion(r.AbsPath); region != "" {
+				rootRegions[envName] = region
 			}
 		}
 	}
@@ -102,18 +106,19 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 	if layout.Type == "service" {
 		proposed.Terraform = config.TerraformConfig{IACDir: layout.IACDir}
 
-		// Service repos: create targets from env dirs under live/.
+		// Service repos: create targets with aws_account and region.
 		proposed.Targets = make(map[string]config.TargetConfig)
 		for _, envName := range layout.EnvNames {
-			proposed.Targets[envName] = config.TargetConfig{}
+			tc := config.TargetConfig{
+				AWSAccount: rootAccountIDs[envName],
+				Region:     rootRegions[envName],
+			}
+			proposed.Targets[envName] = tc
 		}
 
-		// Also create directories map for per-target account IDs.
-		if len(rootAccountIDs) > 0 {
-			proposed.Directories = make(map[string]string)
-			for envName, accountID := range rootAccountIDs {
-				proposed.Directories[envName] = accountID
-			}
+		// Detect helm values files.
+		if helmCfg := detectHelmValues(projectRoot); helmCfg != nil {
+			proposed.Helm = *helmCfg
 		}
 	} else {
 		// Centralized repos: create directory→account mappings.
@@ -253,6 +258,25 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 	return &result, nil
 }
 
+// detectHelmValues scans common locations for helm values files.
+// Returns a HelmConfig with ValuesDir set, or nil if nothing found.
+func detectHelmValues(projectRoot string) *config.HelmConfig {
+	candidates := []string{"misc/chart", "chart", "deploy/chart", "helm"}
+	for _, dir := range candidates {
+		path := filepath.Join(projectRoot, dir)
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") && e.Name() != "shared.yaml" {
+				return &config.HelmConfig{ValuesDir: dir}
+			}
+		}
+	}
+	return nil
+}
+
 // mergeSetupResult merges setup's proposed config into an existing config.
 func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Config {
 	result := *existing
@@ -262,13 +286,27 @@ func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Con
 		result.Terraform.IACDir = proposed.Terraform.IACDir
 	}
 
+	// Merge helm settings.
+	if proposed.Helm.ValuesDir != "" && (result.Helm.ValuesDir == "" || force) {
+		result.Helm.ValuesDir = proposed.Helm.ValuesDir
+	}
+
 	// Merge targets.
 	if result.Targets == nil {
 		result.Targets = make(map[string]config.TargetConfig)
 	}
 	for name, tc := range proposed.Targets {
-		if _, exists := result.Targets[name]; !exists || force {
+		if existing, exists := result.Targets[name]; !exists || force {
 			result.Targets[name] = tc
+		} else {
+			// Enrich existing target with new fields if they were empty.
+			if existing.AWSAccount == "" && tc.AWSAccount != "" {
+				existing.AWSAccount = tc.AWSAccount
+			}
+			if existing.Region == "" && tc.Region != "" {
+				existing.Region = tc.Region
+			}
+			result.Targets[name] = existing
 		}
 	}
 

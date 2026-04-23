@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/example/kestrel/internal/guard"
+	"github.com/example/kestrel/internal/resolve"
 	"github.com/example/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
@@ -210,7 +211,7 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	}
 
 	// Resolve AWS_PROFILE.
-	awsProfile := swoop.ResolveAWSProfile(root, cfg, environment)
+	awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
 
 	if err := ensureSSOSession(awsProfile); err != nil {
 		return err
@@ -326,7 +327,7 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	// Check SSO sessions once per unique profile before starting the batch.
 	checkedProfiles := map[string]bool{}
 	for _, root := range roots {
-		p := swoop.ResolveAWSProfile(root, cfg, environment)
+		p := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
 		if p != "" && !checkedProfiles[p] {
 			if err := ensureSSOSession(p); err != nil {
 				return err
@@ -338,7 +339,7 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	results := make([]batchResult, len(roots))
 
 	for i, root := range roots {
-		awsProfile := swoop.ResolveAWSProfile(root, cfg, environment)
+		awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
 
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)

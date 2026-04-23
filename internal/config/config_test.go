@@ -74,6 +74,48 @@ directories:
 	}
 }
 
+func TestLoadFile_TargetWithAccountAndRegion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	os.WriteFile(path, []byte(`
+targets:
+  dev:
+    cluster: eks-dev
+    aws_account: "585912155334"
+    region: us-east-1
+  prod:
+    cluster: eks-prod
+    aws_account: "593671994769"
+    region: us-east-1
+  local:
+    cluster: kind-local
+`), 0o644)
+
+	cfg, err := loadFile(path)
+	if err != nil {
+		t.Fatalf("loadFile: %v", err)
+	}
+
+	dev := cfg.Targets["dev"]
+	if dev.Cluster != "eks-dev" {
+		t.Errorf("dev.Cluster = %q", dev.Cluster)
+	}
+	if dev.AWSAccount != "585912155334" {
+		t.Errorf("dev.AWSAccount = %q", dev.AWSAccount)
+	}
+	if dev.Region != "us-east-1" {
+		t.Errorf("dev.Region = %q", dev.Region)
+	}
+
+	local := cfg.Targets["local"]
+	if local.AWSAccount != "" {
+		t.Errorf("local.AWSAccount should be empty, got %q", local.AWSAccount)
+	}
+	if local.Region != "" {
+		t.Errorf("local.Region should be empty, got %q", local.Region)
+	}
+}
+
 func TestLoadFile_SwoopConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")
@@ -235,6 +277,12 @@ func TestResolveTarget(t *testing.T) {
 	if resolved.AwsProfile != "dev-sso" {
 		t.Errorf("dev.AwsProfile = %q", resolved.AwsProfile)
 	}
+	if resolved.AccountID != "585912155334" {
+		t.Errorf("dev.AccountID = %q, want 585912155334", resolved.AccountID)
+	}
+	if resolved.Cluster != "eks-dev" {
+		t.Errorf("dev.Cluster = %q, want eks-dev", resolved.Cluster)
+	}
 
 	// local: kind context, no AWS.
 	resolved, err = cfg.ResolveTarget("local")
@@ -252,6 +300,97 @@ func TestResolveTarget(t *testing.T) {
 	_, err = cfg.ResolveTarget("nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent target")
+	}
+}
+
+func TestResolveTarget_ExplicitAccount(t *testing.T) {
+	cfg := &Config{
+		Targets: map[string]TargetConfig{
+			"dev": {
+				Cluster:    "eks-dev",
+				AWSAccount: "585912155334",
+				Region:     "us-east-1",
+			},
+			"prod": {
+				Cluster:    "eks-prod",
+				AWSAccount: "593671994769",
+				Region:     "us-east-1",
+			},
+		},
+		AWS: AWSConfig{
+			Accounts: map[string]AWSAccountConfig{
+				"585912155334": {AwsProfile: "dev-sso"},
+				"593671994769": {AwsProfile: "prd-sso"},
+			},
+		},
+		Kubernetes: KubernetesConfig{
+			Contexts: map[string]string{
+				"eks-dev":  "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+				"eks-prod": "arn:aws:eks:us-east-1:593671994769:cluster/eks-prod",
+			},
+		},
+	}
+
+	resolved, err := cfg.ResolveTarget("dev")
+	if err != nil {
+		t.Fatalf("ResolveTarget(dev): %v", err)
+	}
+	if resolved.AwsProfile != "dev-sso" {
+		t.Errorf("dev.AwsProfile = %q, want dev-sso", resolved.AwsProfile)
+	}
+	if resolved.AccountID != "585912155334" {
+		t.Errorf("dev.AccountID = %q, want 585912155334", resolved.AccountID)
+	}
+	if resolved.Region != "us-east-1" {
+		t.Errorf("dev.Region = %q, want us-east-1", resolved.Region)
+	}
+	if resolved.Cluster != "eks-dev" {
+		t.Errorf("dev.Cluster = %q, want eks-dev", resolved.Cluster)
+	}
+
+	resolved, err = cfg.ResolveTarget("prod")
+	if err != nil {
+		t.Fatalf("ResolveTarget(prod): %v", err)
+	}
+	if resolved.AwsProfile != "prd-sso" {
+		t.Errorf("prod.AwsProfile = %q, want prd-sso", resolved.AwsProfile)
+	}
+	if resolved.AccountID != "593671994769" {
+		t.Errorf("prod.AccountID = %q, want 593671994769", resolved.AccountID)
+	}
+}
+
+func TestResolveTarget_AccountOnly(t *testing.T) {
+	// Target with aws_account but no cluster (terraform-only target).
+	cfg := &Config{
+		Targets: map[string]TargetConfig{
+			"prd": {
+				AWSAccount: "593671994769",
+				Region:     "us-east-1",
+			},
+		},
+		AWS: AWSConfig{
+			Accounts: map[string]AWSAccountConfig{
+				"593671994769": {AwsProfile: "prd-sso"},
+			},
+		},
+	}
+
+	resolved, err := cfg.ResolveTarget("prd")
+	if err != nil {
+		t.Fatalf("ResolveTarget(prd): %v", err)
+	}
+	if resolved.KubeContext != "" {
+		t.Errorf("prd.KubeContext should be empty, got %q", resolved.KubeContext)
+	}
+	if resolved.AwsProfile != "prd-sso" {
+		t.Errorf("prd.AwsProfile = %q, want prd-sso", resolved.AwsProfile)
+	}
+	if resolved.AccountID != "593671994769" {
+		t.Errorf("prd.AccountID = %q, want 593671994769", resolved.AccountID)
+	}
+	if resolved.Region != "us-east-1" {
+		t.Errorf("prd.Region = %q, want us-east-1", resolved.Region)
 	}
 }
 
