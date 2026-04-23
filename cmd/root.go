@@ -6,6 +6,7 @@ import (
 
 	"github.com/example/kestrel/internal/awslogin"
 	"github.com/example/kestrel/internal/config"
+	"github.com/example/kestrel/internal/execlog"
 	"github.com/example/kestrel/internal/guard"
 	"github.com/example/kestrel/internal/logging"
 	"github.com/example/kestrel/internal/profile"
@@ -18,7 +19,8 @@ var (
 	force            bool
 	globalConfigPath string
 	cfg              *config.Config
-	logCleanup       func()
+	logCleanup     func()
+	execlogCleanup func()
 )
 
 var rootCmd = &cobra.Command{
@@ -32,6 +34,13 @@ var rootCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "warning: could not initialize logging: %v\n", err)
 		} else {
 			logCleanup = cleanup
+		}
+
+		elCleanup, err := execlog.Init()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not initialize exec log: %v\n", err)
+		} else {
+			execlogCleanup = elCleanup
 		}
 
 		if globalConfigPath != "" {
@@ -61,6 +70,9 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if execlogCleanup != nil {
+			execlogCleanup()
+		}
 		if logCleanup != nil {
 			logCleanup()
 		}
