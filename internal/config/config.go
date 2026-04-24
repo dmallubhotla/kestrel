@@ -64,11 +64,11 @@ type Sources struct {
 }
 
 type HelmConfig struct {
-	Chart         string                  `yaml:"chart,omitempty"`
-	ValuesDir     string                  `yaml:"values_dir,omitempty"`
-	Namespace     string                  `yaml:"namespace,omitempty"`
-	DeployScripts []string                `yaml:"deploy_scripts,omitempty"`
-	Releases      map[string]HelmRelease  `yaml:"releases,omitempty"`
+	Chart         string                 `yaml:"chart,omitempty"`
+	ValuesDir     string                 `yaml:"values_dir,omitempty"`
+	Namespace     string                 `yaml:"namespace,omitempty"`
+	DeployScripts []string               `yaml:"deploy_scripts,omitempty"`
+	Releases      map[string]HelmRelease `yaml:"releases,omitempty"`
 }
 
 // HelmRelease defines an individual helm release within the project.
