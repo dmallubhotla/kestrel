@@ -7,7 +7,7 @@ It's particularly useful if you're deploying the same app to multiple EKS cluste
 
 ## What it does
 
-- **Helm deploys** with automatic environment/values file layering, image tag resolution, and deploy scripts
+- **Helm deploys** with multi-release support, explicit values file layering, image tag resolution, and deploy scripts
 - **Terraform orchestration** ("swoop") — discovers terraform roots in your repo, lets you pick them interactively or target them with globs, and tracks init/plan/apply state
 - **Profile management** — set a target once, and all subsequent commands use it (no more `-e dev` on every invocation)
 - **Safety guards** — CI-only enforcement, clean worktree checks, prod-only-from-main restrictions
@@ -72,16 +72,35 @@ You can generate the accounts/contexts automatically with `kest config autoconfi
 
 ### Project config (`.kestconfig`)
 
-This goes in your project root (committed to git). It defines your deployment targets and helm/terraform settings:
+This goes in your project root (committed to git). It defines your deployment targets, helm releases, and terraform settings:
 
 ```yaml
 helm:
   chart: oci://ghcr.io/myorg/mychart:1.0
   values_dir: misc/chart
-  release_name: my-app
   namespace: app
   deploy_scripts:
     - misc/chart/deploy-scripts/migrate.sh
+
+  releases:
+    customer-25:
+      release_name: my-app-customer-25
+      target: dev
+      values:
+        - dev.yaml
+        - dev-customer-25.yaml
+    other:
+      release_name: my-app-other
+      target: dev
+      values:
+        - dev.yaml
+        - dev-other.yaml
+    v1:
+      release_name: my-app-v1
+      target: local
+      values:
+        - local.yaml
+      deploy_scripts: []      # skip deploy scripts for local
 
 terraform:
   iac_dir: misc/iac
@@ -89,13 +108,17 @@ terraform:
 targets:
   dev:
     cluster: eks-dev
+    aws_account: "585912155334"
+    region: us-east-1
   prod:
     cluster: eks-prd
+    aws_account: "593671994769"
+    region: us-east-1
   local:
     cluster: kind-local
 ```
 
-Kest walks up from your current directory to find this file, so it works from anywhere in your project tree.
+Each release specifies which target it deploys to. Values files are layered in order — `shared.yaml` (if it exists in `values_dir`) is always included first, then the files listed in `values`. Kest walks up from your current directory to find this file, so it works from anywhere in your project tree.
 
 ## Usage
 
@@ -115,13 +138,16 @@ eval "$(kest profile export)"
 ### Helm
 
 ```sh
-kest -e dev release deploy
-kest -e prod release deploy --force              # bypass all safety guards
-kest release ls
-kest release uninstall
+kest release deploy customer-25                  # deploy a single release
+kest release deploy --all                        # deploy all releases
+kest release deploy --all --target dev           # deploy all dev releases
+kest release deploy customer-25 --force          # bypass all safety guards
+kest release ls                                  # list configured releases
+kest release ls customer-25                      # query helm for release status
+kest release uninstall customer-25
 ```
 
-Helm deploys layer values files (`shared.yaml` then `<target>.yaml`), resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
+Each release knows its target, so no `-e` flag is needed. Helm deploys layer `shared.yaml` (if present) then the release's explicit values files, resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
 
 ### Terraform
 
@@ -219,14 +245,23 @@ swoop:
 helm:
   # OCI chart reference. Required for helm deploys.
   chart: ""
-  # Directory containing values files (shared.yaml, <target>.yaml).
+  # Directory containing values files. shared.yaml in this dir is
+  # auto-included if it exists; all other values are listed per release.
   values_dir: ""
-  # Helm release name. Required for helm deploys.
-  release_name: ""
   # Kubernetes namespace. Default: "app".
   namespace: app
-  # Scripts to run after helm deploy (relative to project root).
+  # Scripts to run before helm deploy (relative to project root).
+  # Can be overridden per release (set to [] to skip).
   deploy_scripts: []
+  # Named releases. Each release targets a specific deployment target.
+  releases:
+    # my-release:
+    #   release_name: my-app-release    # helm release name
+    #   target: dev                     # which target to deploy to
+    #   values:                         # values files (relative to values_dir)
+    #     - dev.yaml
+    #     - dev-my-release.yaml
+    #   deploy_scripts: []              # optional: override top-level scripts
 
 # --- Terraform ---
 terraform:
@@ -235,12 +270,16 @@ terraform:
   # default_version can also be set here to pin per-project. Default: "".
   default_version: ""
 
-# --- Targets (helm deployment targets) ---
+# --- Targets (deployment targets: cluster + AWS account + region) ---
 targets:
   # dev:
   #   cluster: eks-dev
+  #   aws_account: "585912155334"
+  #   region: us-east-1
   # prod:
   #   cluster: eks-prd
+  #   aws_account: "593671994769"
+  #   region: us-east-1
 
 # --- Directories (swoop: top-level dir → AWS account ID) ---
 directories:
@@ -250,13 +289,13 @@ directories:
 
 ## How resolution works
 
-When you run `kest -e dev release deploy`, here's what happens:
+When you run `kest release deploy customer-25`, here's what happens:
 
-1. Kest finds your `.kestconfig` and looks up the `dev` target → gets cluster name `eks-dev`
-2. Looks up `eks-dev` in your global config's contexts → gets the full EKS ARN
-3. Extracts the AWS account ID from the ARN → `585912155334`
+1. Kest finds your `.kestconfig` and looks up the `customer-25` release → gets target `dev`
+2. Looks up the `dev` target → gets cluster name `eks-dev`, account `585912155334`
+3. Looks up `eks-dev` in your global config's contexts → gets the full EKS ARN
 4. Looks up that account ID in your global config's accounts → gets `aws_profile: dev-sso`
-5. Runs helm with the right kube context and AWS_PROFILE set
+5. Runs helm with `shared.yaml` + the release's values files, the right kube context, and AWS_PROFILE set
 
 For swoop, resolution works through directory→account ID mappings instead, but the account→profile lookup is the same.
 

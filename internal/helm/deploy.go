@@ -36,21 +36,14 @@ func Deploy(cfg *config.Config, release config.HelmRelease, resolved config.Reso
 		"--kube-context", resolved.KubeContext,
 	}
 
-	// Layer 1: shared.yaml (always, if exists)
+	// shared.yaml is always included if it exists.
 	sharedValues := filepath.Join(valuesDir, "shared.yaml")
 	if _, err := os.Stat(sharedValues); err == nil {
 		args = append(args, "--values", sharedValues)
 		fmt.Fprintf(os.Stderr, "info: including %s\n", sharedValues)
 	}
 
-	// Layer 2: <target>.yaml (auto from target name, if exists)
-	targetValues := filepath.Join(valuesDir, release.Target+".yaml")
-	if _, err := os.Stat(targetValues); err == nil {
-		args = append(args, "--values", targetValues)
-		fmt.Fprintf(os.Stderr, "info: including %s\n", targetValues)
-	}
-
-	// Layer 3: release-specific values files (required)
+	// Release values files — explicitly listed in config, applied in order.
 	for _, v := range release.Values {
 		vPath := filepath.Join(valuesDir, v)
 		if _, err := os.Stat(vPath); err != nil {

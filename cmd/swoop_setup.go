@@ -261,12 +261,13 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 // detectHelmValues scans common locations for helm values files and infers
 // releases from the naming convention:
 //
-//	shared.yaml                — base layer (auto-included)
-//	<target>.yaml              — target-level layer (auto-included)
-//	<target>-<instance>.yaml   — release-specific → release "<instance>" targeting "<target>"
+//	shared.yaml                — base layer (auto-included by helm.Deploy)
+//	<target>.yaml              — target-level values
+//	<target>-<instance>.yaml   — release-specific values
 //
 // For targets that have no instance-specific files, a release is created
-// with the target name itself.
+// with the target name itself. Values lists are explicit — if a target-level
+// file exists, it's included in the release's values list.
 //
 // The targetNames parameter provides known target names (from terraform
 // layout detection) to disambiguate target-level vs release files.
@@ -335,10 +336,15 @@ func detectHelmValues(projectRoot string, targetNames []string) *config.HelmConf
 						continue
 					}
 					targetsWithInstances[t] = true
+					var values []string
+					if targetFiles[t] {
+						values = append(values, t+".yaml")
+					}
+					values = append(values, name+".yaml")
 					helmCfg.Releases[instance] = config.HelmRelease{
-						ReleaseName: "RELEASE-NAME-" + instance, // placeholder for user to fill in
+						ReleaseName: "RELEASE-NAME-" + instance,
 						Target:      t,
-						Values:      []string{name + ".yaml"},
+						Values:      values,
 					}
 					matched = true
 					break
@@ -365,11 +371,10 @@ func detectHelmValues(projectRoot string, targetNames []string) *config.HelmConf
 				continue // this target has instance-specific releases
 			}
 			if targetFiles[t] {
-				// Target with a values file but no instances → single release.
 				helmCfg.Releases[t] = config.HelmRelease{
 					ReleaseName: "RELEASE-NAME-" + t,
 					Target:      t,
-					// No extra values — the target.yaml is auto-included as layer 2.
+					Values:      []string{t + ".yaml"},
 				}
 			}
 		}
