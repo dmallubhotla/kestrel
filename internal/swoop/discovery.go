@@ -44,9 +44,10 @@ func Discover(baseDir string) ([]Root, error) {
 				Initialized: isInitialized(path),
 			}
 			roots = append(roots, root)
-			// Don't descend into the root's subdirectories — a root
-			// should not contain nested roots.
-			return filepath.SkipDir
+			// Continue walking — nested roots (children with their own
+			// backend blocks) are legitimate and should be discovered.
+			// .terraform/ and modules/ are already pruned above.
+			return nil
 		}
 
 		return nil

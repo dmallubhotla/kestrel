@@ -206,6 +206,39 @@ func TestDiscover_ServiceEmbeddedLayout(t *testing.T) {
 	}
 }
 
+func TestDiscover_NestedRoots(t *testing.T) {
+	base := t.TempDir()
+
+	// Parent root with backend.
+	createTFRoot(t, filepath.Join(base, "prd", "_global", "github-oidc"))
+	// Child root nested inside parent — has its own backend.
+	createTFRoot(t, filepath.Join(base, "prd", "_global", "github-oidc", "geodata-store-api"))
+	// Unrelated sibling root.
+	createTFRoot(t, filepath.Join(base, "dev", "networking", "vpc"))
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	paths := rootPaths(roots)
+	sort.Strings(paths)
+
+	expected := []string{
+		filepath.Join("dev", "networking", "vpc"),
+		filepath.Join("prd", "_global", "github-oidc"),
+		filepath.Join("prd", "_global", "github-oidc", "geodata-store-api"),
+	}
+	if len(paths) != len(expected) {
+		t.Fatalf("got %d roots, want %d: %v", len(paths), len(expected), paths)
+	}
+	for i, p := range expected {
+		if paths[i] != p {
+			t.Errorf("root[%d] = %q, want %q", i, paths[i], p)
+		}
+	}
+}
+
 func rootPaths(roots []Root) []string {
 	out := make([]string, len(roots))
 	for i, r := range roots {
