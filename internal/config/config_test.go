@@ -13,8 +13,18 @@ func TestLoadFile_YAML(t *testing.T) {
 helm:
   chart: oci://ghcr.io/test/chart:1.0
   values_dir: misc/chart
-  release_name: my-app
   namespace: app
+  releases:
+    customer-25:
+      release_name: my-app-customer-25
+      target: dev
+      values:
+        - dev-customer-25.yaml
+    other:
+      release_name: my-app-other
+      target: dev
+      values:
+        - dev-other.yaml
 
 targets:
   dev:
@@ -49,6 +59,20 @@ directories:
 
 	if cfg.Helm.Chart != "oci://ghcr.io/test/chart:1.0" {
 		t.Errorf("chart = %q", cfg.Helm.Chart)
+	}
+
+	if len(cfg.Helm.Releases) != 2 {
+		t.Fatalf("expected 2 releases, got %d", len(cfg.Helm.Releases))
+	}
+	r := cfg.Helm.Releases["customer-25"]
+	if r.ReleaseName != "my-app-customer-25" {
+		t.Errorf("releases[customer-25].release_name = %q", r.ReleaseName)
+	}
+	if r.Target != "dev" {
+		t.Errorf("releases[customer-25].target = %q", r.Target)
+	}
+	if len(r.Values) != 1 || r.Values[0] != "dev-customer-25.yaml" {
+		t.Errorf("releases[customer-25].values = %v", r.Values)
 	}
 
 	if len(cfg.Targets) != 3 {
@@ -211,7 +235,13 @@ func TestCompose_ProjectOverridesUser(t *testing.T) {
 		},
 	}
 	project := &Config{
-		Helm: HelmConfig{Chart: "project-chart", ValuesDir: "misc/chart"},
+		Helm: HelmConfig{
+			Chart:     "project-chart",
+			ValuesDir: "misc/chart",
+			Releases: map[string]HelmRelease{
+				"v1": {ReleaseName: "app-v1", Target: "dev"},
+			},
+		},
 		Targets: map[string]TargetConfig{
 			"dev":  {Cluster: "eks-dev"},
 			"prod": {Cluster: "eks-prd"},
@@ -228,6 +258,13 @@ func TestCompose_ProjectOverridesUser(t *testing.T) {
 	// User namespace preserved.
 	if out.Helm.Namespace != "user-ns" {
 		t.Errorf("Helm.Namespace = %q", out.Helm.Namespace)
+	}
+	// Releases from project.
+	if len(out.Helm.Releases) != 1 {
+		t.Fatalf("expected 1 release, got %d", len(out.Helm.Releases))
+	}
+	if out.Helm.Releases["v1"].ReleaseName != "app-v1" {
+		t.Errorf("Helm.Releases[v1].ReleaseName = %q", out.Helm.Releases["v1"].ReleaseName)
 	}
 	// Targets from project.
 	if len(out.Targets) != 2 {
@@ -478,5 +515,154 @@ func TestTargetNames(t *testing.T) {
 	// Should be sorted.
 	if names[0] != "dev" || names[1] != "local" || names[2] != "prod" {
 		t.Errorf("expected [dev local prod], got %v", names)
+	}
+}
+
+func TestReleaseNames(t *testing.T) {
+	cfg := &Config{
+		Helm: HelmConfig{
+			Releases: map[string]HelmRelease{
+				"other":       {ReleaseName: "app-other", Target: "dev"},
+				"customer-25": {ReleaseName: "app-customer-25", Target: "dev"},
+				"v1":          {ReleaseName: "app-v1", Target: "local"},
+			},
+		},
+	}
+
+	names := cfg.ReleaseNames()
+	if len(names) != 3 {
+		t.Fatalf("expected 3, got %d", len(names))
+	}
+	if names[0] != "customer-25" || names[1] != "other" || names[2] != "v1" {
+		t.Errorf("expected [customer-25 other v1], got %v", names)
+	}
+}
+
+func TestReleasesForTarget(t *testing.T) {
+	cfg := &Config{
+		Helm: HelmConfig{
+			Releases: map[string]HelmRelease{
+				"other":       {ReleaseName: "app-other", Target: "dev"},
+				"customer-25": {ReleaseName: "app-customer-25", Target: "dev"},
+				"v1":          {ReleaseName: "app-v1", Target: "local"},
+			},
+		},
+	}
+
+	devReleases := cfg.ReleasesForTarget("dev")
+	if len(devReleases) != 2 {
+		t.Fatalf("expected 2 dev releases, got %d", len(devReleases))
+	}
+	if devReleases[0] != "customer-25" || devReleases[1] != "other" {
+		t.Errorf("expected [customer-25 other], got %v", devReleases)
+	}
+
+	localReleases := cfg.ReleasesForTarget("local")
+	if len(localReleases) != 1 || localReleases[0] != "v1" {
+		t.Errorf("expected [v1], got %v", localReleases)
+	}
+
+	prodReleases := cfg.ReleasesForTarget("prod")
+	if len(prodReleases) != 0 {
+		t.Errorf("expected 0 prod releases, got %d", len(prodReleases))
+	}
+}
+
+func TestEffectiveDeployScripts(t *testing.T) {
+	topLevel := []string{"migrate.sh"}
+	perRelease := []string{"custom.sh"}
+	empty := []string{}
+
+	cfg := &Config{
+		Helm: HelmConfig{
+			DeployScripts: topLevel,
+		},
+	}
+
+	// nil DeployScripts → inherit from HelmConfig
+	r1 := HelmRelease{DeployScripts: nil}
+	got := cfg.EffectiveDeployScripts(r1)
+	if len(got) != 1 || got[0] != "migrate.sh" {
+		t.Errorf("nil override: got %v, want %v", got, topLevel)
+	}
+
+	// explicit override
+	r2 := HelmRelease{DeployScripts: &perRelease}
+	got = cfg.EffectiveDeployScripts(r2)
+	if len(got) != 1 || got[0] != "custom.sh" {
+		t.Errorf("override: got %v, want %v", got, perRelease)
+	}
+
+	// explicit empty → skip scripts
+	r3 := HelmRelease{DeployScripts: &empty}
+	got = cfg.EffectiveDeployScripts(r3)
+	if len(got) != 0 {
+		t.Errorf("empty override: got %v, want []", got)
+	}
+}
+
+func TestLoadFile_HelmReleases(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.yaml")
+	os.WriteFile(path, []byte(`
+helm:
+  chart: oci://ghcr.io/test/chart:1.0
+  values_dir: chart
+  namespace: app
+  deploy_scripts:
+    - migrate.sh
+  releases:
+    customer-25:
+      release_name: owl-copy-customer-25
+      target: dev
+      values:
+        - dev-customer-25.yaml
+    other:
+      release_name: owl-copy-other
+      target: dev
+      values:
+        - dev-other.yaml
+    v1:
+      release_name: owl-copy-v1
+      target: local
+      values:
+        - local.yaml
+      deploy_scripts: []
+`), 0o644)
+
+	cfg, err := loadFile(path)
+	if err != nil {
+		t.Fatalf("loadFile: %v", err)
+	}
+
+	if len(cfg.Helm.Releases) != 3 {
+		t.Fatalf("expected 3 releases, got %d", len(cfg.Helm.Releases))
+	}
+
+	c25 := cfg.Helm.Releases["customer-25"]
+	if c25.ReleaseName != "owl-copy-customer-25" {
+		t.Errorf("customer-25.release_name = %q", c25.ReleaseName)
+	}
+	if c25.Target != "dev" {
+		t.Errorf("customer-25.target = %q", c25.Target)
+	}
+	if len(c25.Values) != 1 || c25.Values[0] != "dev-customer-25.yaml" {
+		t.Errorf("customer-25.values = %v", c25.Values)
+	}
+	if c25.DeployScripts != nil {
+		t.Error("customer-25.deploy_scripts should be nil (inherit)")
+	}
+
+	v1 := cfg.Helm.Releases["v1"]
+	if v1.DeployScripts == nil {
+		t.Fatal("v1.deploy_scripts should not be nil (explicit empty)")
+	}
+	if len(*v1.DeployScripts) != 0 {
+		t.Errorf("v1.deploy_scripts should be empty, got %v", *v1.DeployScripts)
+	}
+
+	// Top-level deploy scripts
+	if len(cfg.Helm.DeployScripts) != 1 || cfg.Helm.DeployScripts[0] != "migrate.sh" {
+		t.Errorf("helm.deploy_scripts = %v", cfg.Helm.DeployScripts)
 	}
 }

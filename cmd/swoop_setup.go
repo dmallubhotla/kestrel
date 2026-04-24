@@ -117,7 +117,7 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		}
 
 		// Detect helm values files.
-		if helmCfg := detectHelmValues(projectRoot); helmCfg != nil {
+		if helmCfg := detectHelmValues(projectRoot, layout.EnvNames); helmCfg != nil {
 			proposed.Helm = *helmCfg
 		}
 	} else {
@@ -258,21 +258,129 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 	return &result, nil
 }
 
-// detectHelmValues scans common locations for helm values files.
-// Returns a HelmConfig with ValuesDir set, or nil if nothing found.
-func detectHelmValues(projectRoot string) *config.HelmConfig {
+// detectHelmValues scans common locations for helm values files and infers
+// releases from the naming convention:
+//
+//	shared.yaml                — base layer (auto-included)
+//	<target>.yaml              — target-level layer (auto-included)
+//	<target>-<instance>.yaml   — release-specific → release "<instance>" targeting "<target>"
+//
+// For targets that have no instance-specific files, a release is created
+// with the target name itself.
+//
+// The targetNames parameter provides known target names (from terraform
+// layout detection) to disambiguate target-level vs release files.
+func detectHelmValues(projectRoot string, targetNames []string) *config.HelmConfig {
 	candidates := []string{"misc/chart", "chart", "deploy/chart", "helm"}
+
 	for _, dir := range candidates {
 		path := filepath.Join(projectRoot, dir)
 		entries, err := os.ReadDir(path)
 		if err != nil {
 			continue
 		}
+
+		// Collect yaml files (excluding shared.yaml).
+		var yamlFiles []string
+		hasShared := false
 		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") && e.Name() != "shared.yaml" {
-				return &config.HelmConfig{ValuesDir: dir}
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+				continue
+			}
+			name := strings.TrimSuffix(e.Name(), ".yaml")
+			if name == "shared" {
+				hasShared = true
+				continue
+			}
+			yamlFiles = append(yamlFiles, name)
+		}
+
+		if !hasShared && len(yamlFiles) == 0 {
+			continue
+		}
+
+		helmCfg := &config.HelmConfig{
+			ValuesDir: dir,
+			Releases:  make(map[string]config.HelmRelease),
+		}
+
+		// Build a set of known targets for prefix matching.
+		targetSet := make(map[string]bool, len(targetNames))
+		for _, t := range targetNames {
+			targetSet[t] = true
+		}
+
+		// Classify each yaml file.
+		// Pass 1: identify target-level files (exact match to a target name).
+		targetFiles := make(map[string]bool) // target name → has a <target>.yaml
+		for _, name := range yamlFiles {
+			if targetSet[name] {
+				targetFiles[name] = true
 			}
 		}
+
+		// Pass 2: identify release files (<target>-<instance>.yaml).
+		targetsWithInstances := make(map[string]bool) // targets that have instance files
+		for _, name := range yamlFiles {
+			if targetFiles[name] {
+				continue // this is a target-level file, not a release
+			}
+			// Try to match <target>-<instance> pattern.
+			matched := false
+			for _, t := range targetNames {
+				prefix := t + "-"
+				if strings.HasPrefix(name, prefix) {
+					instance := name[len(prefix):]
+					if instance == "" {
+						continue
+					}
+					targetsWithInstances[t] = true
+					helmCfg.Releases[instance] = config.HelmRelease{
+						ReleaseName: "RELEASE-NAME-" + instance, // placeholder for user to fill in
+						Target:      t,
+						Values:      []string{name + ".yaml"},
+					}
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				// Unmatched file — could be a standalone release or unknown target.
+				// If it's not a known target name, treat it as a single-file release
+				// targeting itself (the user can fix the target in editor).
+				if !targetSet[name] {
+					helmCfg.Releases[name] = config.HelmRelease{
+						ReleaseName: "RELEASE-NAME-" + name,
+						Target:      name,
+						Values:      []string{name + ".yaml"},
+					}
+				}
+			}
+		}
+
+		// Pass 3: for targets that have NO instance files and DO have a
+		// target-level yaml, create a single release named after the target.
+		for _, t := range targetNames {
+			if targetsWithInstances[t] {
+				continue // this target has instance-specific releases
+			}
+			if targetFiles[t] {
+				// Target with a values file but no instances → single release.
+				helmCfg.Releases[t] = config.HelmRelease{
+					ReleaseName: "RELEASE-NAME-" + t,
+					Target:      t,
+					// No extra values — the target.yaml is auto-included as layer 2.
+				}
+			}
+		}
+
+		if len(helmCfg.Releases) == 0 {
+			// Found a values dir but couldn't infer releases.
+			// Return just the dir so the user can fill in releases manually.
+			helmCfg.Releases = nil
+		}
+
+		return helmCfg
 	}
 	return nil
 }
@@ -289,6 +397,16 @@ func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Con
 	// Merge helm settings.
 	if proposed.Helm.ValuesDir != "" && (result.Helm.ValuesDir == "" || force) {
 		result.Helm.ValuesDir = proposed.Helm.ValuesDir
+	}
+	if len(proposed.Helm.Releases) > 0 {
+		if result.Helm.Releases == nil {
+			result.Helm.Releases = make(map[string]config.HelmRelease)
+		}
+		for name, rel := range proposed.Helm.Releases {
+			if _, exists := result.Helm.Releases[name]; !exists || force {
+				result.Helm.Releases[name] = rel
+			}
+		}
 	}
 
 	// Merge targets.

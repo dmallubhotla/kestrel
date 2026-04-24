@@ -64,11 +64,20 @@ type Sources struct {
 }
 
 type HelmConfig struct {
-	Chart         string   `yaml:"chart,omitempty"`
-	ValuesDir     string   `yaml:"values_dir,omitempty"`
-	DeployScripts []string `yaml:"deploy_scripts,omitempty"`
-	ReleaseName   string   `yaml:"release_name,omitempty"`
-	Namespace     string   `yaml:"namespace,omitempty"`
+	Chart         string                  `yaml:"chart,omitempty"`
+	ValuesDir     string                  `yaml:"values_dir,omitempty"`
+	Namespace     string                  `yaml:"namespace,omitempty"`
+	DeployScripts []string                `yaml:"deploy_scripts,omitempty"`
+	Releases      map[string]HelmRelease  `yaml:"releases,omitempty"`
+}
+
+// HelmRelease defines an individual helm release within the project.
+// Multiple releases can target the same cluster with different values.
+type HelmRelease struct {
+	ReleaseName   string    `yaml:"release_name"`
+	Target        string    `yaml:"target"`
+	Values        []string  `yaml:"values,omitempty"`
+	DeployScripts *[]string `yaml:"deploy_scripts,omitempty"` // nil = inherit from HelmConfig, [] = skip
 }
 
 type TerraformConfig struct {
@@ -227,11 +236,11 @@ func compose(user, project *Config) *Config {
 	if len(project.Helm.DeployScripts) > 0 {
 		out.Helm.DeployScripts = project.Helm.DeployScripts
 	}
-	if project.Helm.ReleaseName != "" {
-		out.Helm.ReleaseName = project.Helm.ReleaseName
-	}
 	if project.Helm.Namespace != "" {
 		out.Helm.Namespace = project.Helm.Namespace
+	}
+	if len(project.Helm.Releases) > 0 {
+		out.Helm.Releases = project.Helm.Releases
 	}
 
 	// Terraform: IACDir comes from project; behaviour flags come from user
@@ -323,6 +332,38 @@ func (c *Config) HasProjectTargets() bool {
 // TargetNames returns a sorted list of target names.
 func (c *Config) TargetNames() []string {
 	return sortedKeys(c.Targets)
+}
+
+// ReleaseNames returns a sorted list of helm release keys.
+func (c *Config) ReleaseNames() []string {
+	return sortedKeys(c.Helm.Releases)
+}
+
+// ReleasesForTarget returns release keys that target the given target name.
+func (c *Config) ReleasesForTarget(target string) []string {
+	var names []string
+	for k, r := range c.Helm.Releases {
+		if r.Target == target {
+			names = append(names, k)
+		}
+	}
+	// Sort for deterministic ordering.
+	for i := 1; i < len(names); i++ {
+		for j := i; j > 0 && names[j] < names[j-1]; j-- {
+			names[j], names[j-1] = names[j-1], names[j]
+		}
+	}
+	return names
+}
+
+// EffectiveDeployScripts returns the deploy scripts for a release,
+// falling back to the top-level HelmConfig scripts when the release
+// does not override them.
+func (c *Config) EffectiveDeployScripts(release HelmRelease) []string {
+	if release.DeployScripts != nil {
+		return *release.DeployScripts
+	}
+	return c.Helm.DeployScripts
 }
 
 func sortedKeys[V any](m map[string]V) []string {

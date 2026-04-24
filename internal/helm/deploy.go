@@ -9,8 +9,6 @@ import (
 	"github.com/example/kestrel/internal/runner"
 )
 
-// Deploy runs a helm upgrade --install with the appropriate flags,
-// mirroring the logic from common-helm-deploy.sh.
 func envMap(awsProfile string) map[string]string {
 	if awsProfile == "" {
 		return nil
@@ -18,9 +16,13 @@ func envMap(awsProfile string) map[string]string {
 	return map[string]string{"AWS_PROFILE": awsProfile}
 }
 
-// Deploy runs a helm upgrade --install with the appropriate flags,
-// mirroring the logic from common-helm-deploy.sh.
-func Deploy(cfg *config.Config, targetName string, resolved config.ResolvedTarget, tag string, extraArgs []string) error {
+// Deploy runs helm upgrade --install for a single release with 3-layer
+// values coalescence:
+//
+//  1. shared.yaml           — common to all releases (optional, included if exists)
+//  2. <target>.yaml         — target-specific (optional, included if exists)
+//  3. release.Values[...]   — release-specific (required, error if missing)
+func Deploy(cfg *config.Config, release config.HelmRelease, resolved config.ResolvedTarget, tag string, extraArgs []string) error {
 	valuesDir := cfg.Helm.ValuesDir
 
 	args := []string{
@@ -34,24 +36,35 @@ func Deploy(cfg *config.Config, targetName string, resolved config.ResolvedTarge
 		"--kube-context", resolved.KubeContext,
 	}
 
-	// Layer values files: shared.yaml first, then <target>.yaml
+	// Layer 1: shared.yaml (always, if exists)
 	sharedValues := filepath.Join(valuesDir, "shared.yaml")
 	if _, err := os.Stat(sharedValues); err == nil {
 		args = append(args, "--values", sharedValues)
 		fmt.Fprintf(os.Stderr, "info: including %s\n", sharedValues)
 	}
 
-	envValues := filepath.Join(valuesDir, targetName+".yaml")
-	if _, err := os.Stat(envValues); err != nil {
-		return fmt.Errorf("values file not found: %s (target %q not supported?)", envValues, targetName)
+	// Layer 2: <target>.yaml (auto from target name, if exists)
+	targetValues := filepath.Join(valuesDir, release.Target+".yaml")
+	if _, err := os.Stat(targetValues); err == nil {
+		args = append(args, "--values", targetValues)
+		fmt.Fprintf(os.Stderr, "info: including %s\n", targetValues)
 	}
-	args = append(args, "--values", envValues)
+
+	// Layer 3: release-specific values files (required)
+	for _, v := range release.Values {
+		vPath := filepath.Join(valuesDir, v)
+		if _, err := os.Stat(vPath); err != nil {
+			return fmt.Errorf("values file not found: %s (release %q)", vPath, release.ReleaseName)
+		}
+		args = append(args, "--values", vPath)
+		fmt.Fprintf(os.Stderr, "info: including %s\n", vPath)
+	}
 
 	// Set image tag
 	args = append(args, "--set", "image.tag="+tag)
 
 	// Release name and chart
-	args = append(args, cfg.Helm.ReleaseName, cfg.Helm.Chart)
+	args = append(args, release.ReleaseName, cfg.Helm.Chart)
 
 	// Extra args passed through
 	args = append(args, extraArgs...)
@@ -60,21 +73,22 @@ func Deploy(cfg *config.Config, targetName string, resolved config.ResolvedTarge
 }
 
 // List shows deployment info for a release.
-func List(cfg *config.Config, resolved config.ResolvedTarget) error {
+func List(cfg *config.Config, release config.HelmRelease, resolved config.ResolvedTarget) error {
 	return runner.RunWithEnv(envMap(resolved.AwsProfile), "helm", "ls",
 		"--kube-context", resolved.KubeContext,
 		"-n", cfg.Helm.Namespace,
+		"--filter", release.ReleaseName,
 	)
 }
 
 // Uninstall removes a helm release.
-func Uninstall(cfg *config.Config, resolved config.ResolvedTarget) error {
+func Uninstall(cfg *config.Config, release config.HelmRelease, resolved config.ResolvedTarget) error {
 	return runner.RunWithEnv(envMap(resolved.AwsProfile), "helm", "uninstall",
 		"--namespace", cfg.Helm.Namespace,
 		"--wait",
 		"--timeout", "5m0s",
 		"--kube-context", resolved.KubeContext,
-		cfg.Helm.ReleaseName,
+		release.ReleaseName,
 	)
 }
 
