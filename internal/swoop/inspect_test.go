@@ -149,6 +149,148 @@ inputs = {
 	}
 }
 
+func TestExtractBackendAuth_AssumeRoleArn(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "s3" {
+    bucket      = "example-iac-tfstate"
+    key         = "dev/vpc/terraform.tfstate"
+    assume_role = { role_arn = "arn:aws:iam::593671994769:role/tf-runner" }
+  }
+}
+
+provider "aws" {
+  region              = "us-east-1"
+  allowed_account_ids = ["585912155334"]
+  assume_role { role_arn = "arn:aws:iam::585912155334:role/dev-deployer" }
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	want := BackendAuth{AccountID: "593671994769"}
+	if got != want {
+		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractBackendAuth_TopLevelRoleArn(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "s3" {
+    bucket   = "example-iac-tfstate"
+    role_arn = "arn:aws:iam::732277778391:role/dr-deployer"
+  }
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	want := BackendAuth{AccountID: "732277778391"}
+	if got != want {
+		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractBackendAuth_ExplicitProfile(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "s3" {
+    bucket  = "example-iac-tfstate"
+    profile = "prod-tfstate"
+  }
+}
+
+provider "aws" {
+  region  = "us-east-1"
+  profile = "example-dev"
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	want := BackendAuth{Profile: "prod-tfstate"}
+	if got != want {
+		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractBackendAuth_IgnoresProviderBlock(t *testing.T) {
+	// role_arn / profile in the provider block must not be returned —
+	// only attributes inside `backend "s3"` count.
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "s3" {
+    bucket = "example-iac-tfstate"
+    key    = "dev/vpc/terraform.tfstate"
+  }
+}
+
+provider "aws" {
+  region  = "us-east-1"
+  profile = "example-dev"
+  assume_role { role_arn = "arn:aws:iam::585912155334:role/dev-deployer" }
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	if got != (BackendAuth{}) {
+		t.Errorf("ExtractBackendAuth = %+v, want zero (no backend auth)", got)
+	}
+}
+
+func TestExtractBackendAuth_NoBackend(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+provider "aws" {
+  region = "us-east-1"
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	if got != (BackendAuth{}) {
+		t.Errorf("ExtractBackendAuth = %+v, want zero", got)
+	}
+}
+
+func TestExtractBackendAuth_NonS3Backend(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	if got != (BackendAuth{}) {
+		t.Errorf("ExtractBackendAuth = %+v, want zero (non-s3 backend)", got)
+	}
+}
+
+func TestExtractBackendAuth_MultiLineAssumeRole(t *testing.T) {
+	// assume_role block spans multiple lines.
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+terraform {
+  backend "s3" {
+    bucket = "example-iac-tfstate"
+    assume_role {
+      role_arn = "arn:aws:iam::593671994769:role/tf-runner"
+    }
+  }
+}
+`), 0o644)
+
+	got := ExtractBackendAuth(dir)
+	want := BackendAuth{AccountID: "593671994769"}
+	if got != want {
+		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
+	}
+}
+
 func TestExtractAccountIDs_NoMatch(t *testing.T) {
 	base := t.TempDir()
 	os.WriteFile(filepath.Join(base, "main.tf"), []byte(`

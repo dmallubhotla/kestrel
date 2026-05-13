@@ -216,6 +216,11 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	if err := ensureSSOSession(awsProfile); err != nil {
 		return err
 	}
+	if bp := backendProfileFor(root, awsProfile); bp != "" {
+		if err := ensureSSOSession(bp); err != nil {
+			return err
+		}
+	}
 
 	// Write .terraform-version if missing and configured.
 	if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
@@ -325,6 +330,8 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	fmt.Fprintf(os.Stderr, "Running terraform %s on %d root(s)...\n\n", action, len(roots))
 
 	// Check SSO sessions once per unique profile before starting the batch.
+	// Includes both the apply profile and (if different) the backend profile
+	// derived from the root's `backend "s3"` block.
 	checkedProfiles := map[string]bool{}
 	for _, root := range roots {
 		p := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
@@ -333,6 +340,12 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 				return err
 			}
 			checkedProfiles[p] = true
+		}
+		if bp := backendProfileFor(root, p); bp != "" && !checkedProfiles[bp] {
+			if err := ensureSSOSession(bp); err != nil {
+				return err
+			}
+			checkedProfiles[bp] = true
 		}
 	}
 
@@ -445,6 +458,28 @@ func ambiguousTargetError(matches []swoop.Root, target string) error {
 		msg += fmt.Sprintf("  %s\n", m.Path)
 	}
 	return fmt.Errorf("%s", msg)
+}
+
+// backendProfileFor returns the extra AWS profile needed for a root's S3
+// backend, when it differs from applyProfile. Returns "" when the backend
+// block has no profile/role_arn, when resolution fails, or when the
+// resolved profile matches applyProfile.
+func backendProfileFor(root swoop.Root, applyProfile string) string {
+	if cfg == nil {
+		return ""
+	}
+	auth := swoop.ExtractBackendAuth(root.AbsPath)
+	var p string
+	switch {
+	case auth.Profile != "":
+		p = auth.Profile
+	case auth.AccountID != "":
+		p = cfg.ResolveAccountProfile(auth.AccountID)
+	}
+	if p == "" || p == applyProfile {
+		return ""
+	}
+	return p
 }
 
 func recordAction(baseDir, rootPath, action string, result *swoop.ExecResult) {

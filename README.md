@@ -265,7 +265,8 @@ helm:
 
 # --- Terraform ---
 terraform:
-  # Path to IaC directory (for `kest terraform` proxy). Default: "".
+  # Path to IaC directory (swoop discovery base for centralised IaC repos).
+  # Default: "" (project root).
   iac_dir: ""
   # default_version can also be set here to pin per-project. Default: "".
   default_version: ""

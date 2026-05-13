@@ -77,6 +77,90 @@ var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 //	region = "us-east-1"
 var regionRe = regexp.MustCompile(`region\s*=\s*"([a-z]+-[a-z]+-\d+)"`)
 
+// roleArnAccountRe matches the 12-digit account ID inside an IAM role ARN:
+//
+//	role_arn = "arn:aws:iam::593671994769:role/tf-runner"
+var roleArnAccountRe = regexp.MustCompile(`role_arn\s*=\s*"arn:aws:iam::(\d{12}):role/[^"]+"`)
+
+// backendProfileRe matches a profile attribute inside the backend block:
+//
+//	profile = "prd"
+var backendProfileRe = regexp.MustCompile(`profile\s*=\s*"([^"]+)"`)
+
+// BackendAuth describes credentials needed for a root's S3 backend.
+// Exactly one of Profile or AccountID is non-empty; both empty means the
+// backend block had nothing to resolve (no explicit profile, no role_arn).
+type BackendAuth struct {
+	// Profile is an explicit `profile = "..."` from the backend block.
+	Profile string
+	// AccountID is the 12-digit account from a `role_arn` (top-level or
+	// inside `assume_role { ... }`) in the backend block.
+	AccountID string
+}
+
+// ExtractBackendAuth scans .tf files in dir for the credentials needed to
+// reach the S3 backend: either an explicit `profile = "..."` or an account
+// ID derived from `role_arn` / `assume_role` inside the `backend "s3"` block.
+// Returns the first match found, or a zero value if the backend block is
+// absent or has no auth attributes.
+func ExtractBackendAuth(dir string) BackendAuth {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return BackendAuth{}
+	}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tf") {
+			continue
+		}
+		if a := extractBackendAuthFromFile(filepath.Join(dir, e.Name())); a != (BackendAuth{}) {
+			return a
+		}
+	}
+	return BackendAuth{}
+}
+
+// extractBackendAuthFromFile scans a single .tf file. It tracks brace depth
+// so role_arn / profile attributes in provider blocks are not misattributed
+// to the backend.
+func extractBackendAuthFromFile(path string) BackendAuth {
+	f, err := os.Open(path)
+	if err != nil {
+		return BackendAuth{}
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	inBackend := false
+	depth := 0
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		if !inBackend {
+			if strings.HasPrefix(trimmed, "backend ") && strings.Contains(trimmed, `"s3"`) && strings.Contains(line, "{") {
+				inBackend = true
+				depth = strings.Count(line, "{") - strings.Count(line, "}")
+			}
+			continue
+		}
+
+		if m := backendProfileRe.FindStringSubmatch(line); len(m) > 1 {
+			return BackendAuth{Profile: m[1]}
+		}
+		if m := roleArnAccountRe.FindStringSubmatch(line); len(m) > 1 {
+			return BackendAuth{AccountID: m[1]}
+		}
+
+		depth += strings.Count(line, "{") - strings.Count(line, "}")
+		if depth <= 0 {
+			inBackend = false
+		}
+	}
+	return BackendAuth{}
+}
+
 // extractAccountIDs scans .tf and .hcl files in a directory for account ID values.
 func extractAccountIDs(dir string) []string {
 	entries, err := os.ReadDir(dir)

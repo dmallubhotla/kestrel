@@ -1,3 +1,10 @@
+//go:build legacy
+
+// Package cmd's terraform.go is the legacy `kest terraform` proxy that
+// shells terraform commands into <iac_dir>/live/<env>/. It pre-dates
+// `kest swoop`, which now handles all terraform workflows. The file is
+// excluded from default builds via the `legacy` build tag; build with
+// `-tags legacy` to revive it.
 package cmd
 
 import (
