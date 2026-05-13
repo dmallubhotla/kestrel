@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/example/kestrel/internal/guard"
@@ -132,6 +133,7 @@ func deploySingleRelease(releaseName string, extraArgs []string) error {
 
 	// Deploy scripts
 	for _, script := range cfg.EffectiveDeployScripts(release) {
+		slog.Info("running deploy script", "release", releaseName, "script", script)
 		fmt.Fprintf(os.Stderr, "info: running deploy script %s\n", script)
 		if err := runner.Run("bash", script); err != nil {
 			return fmt.Errorf("deploy script %s failed: %w", script, err)
@@ -143,6 +145,12 @@ func deploySingleRelease(releaseName string, extraArgs []string) error {
 	if err != nil {
 		return err
 	}
+	slog.Info("deploying release",
+		"release", releaseName,
+		"helm_release", release.ReleaseName,
+		"target", release.Target,
+		"tag", tag,
+	)
 	fmt.Fprintf(os.Stderr, "info: deploying %s (release %s) to %s — tag %s\n",
 		releaseName, release.ReleaseName, release.Target, tag)
 
@@ -159,6 +167,7 @@ func deployAllReleases(extraArgs []string) error {
 		return fmt.Errorf("no releases found")
 	}
 
+	slog.Info("batch deploying releases", "count", len(names), "releases", names)
 	fmt.Fprintf(os.Stderr, "info: deploying %d release(s): %v\n", len(names), names)
 
 	for _, name := range names {

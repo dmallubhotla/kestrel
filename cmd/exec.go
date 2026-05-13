@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"syscall"
@@ -45,6 +46,7 @@ Use -- to separate kest flags from the wrapped command's flags:
 
 		// Switch kube context before exec (modifies kubeconfig state).
 		if resolved.KubeContext != "" {
+			slog.Info("switching kube context", "context", resolved.KubeContext)
 			if verbose {
 				fmt.Fprintf(os.Stderr, "debug: switching kube context to %s\n", resolved.KubeContext)
 			}

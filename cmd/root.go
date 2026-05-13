@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/example/kestrel/internal/awslogin"
@@ -51,6 +52,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		slog.Debug("config loaded", "chart", cfg.Helm.Chart, "iac_dir", cfg.Terraform.IACDir)
 		if verbose {
 			fmt.Fprintf(os.Stderr, "debug: config loaded (chart=%s, iac_dir=%s)\n",
 				cfg.Helm.Chart, cfg.Terraform.IACDir)
@@ -61,11 +63,19 @@ var rootCmd = &cobra.Command{
 			active, err := profile.Read()
 			if err == nil && active != "" {
 				environment = active
+				slog.Debug("using active profile", "profile", active)
 				if verbose {
 					fmt.Fprintf(os.Stderr, "debug: using active profile %q\n", active)
 				}
 			}
 		}
+
+		slog.Info("kest invoked",
+			"command", cmd.CommandPath(),
+			"args", args,
+			"environment", environment,
+			"ci", guard.IsCI(),
+		)
 
 		return nil
 	},

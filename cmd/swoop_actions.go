@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -212,22 +213,31 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 
 	// Resolve AWS_PROFILE.
 	awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
+	backendProfile := backendProfileFor(root, awsProfile)
 
 	if err := ensureSSOSession(awsProfile); err != nil {
 		return err
 	}
-	if bp := backendProfileFor(root, awsProfile); bp != "" {
-		if err := ensureSSOSession(bp); err != nil {
+	if backendProfile != "" {
+		if err := ensureSSOSession(backendProfile); err != nil {
 			return err
 		}
+	}
+
+	// Fallback: when there are no provider blocks (apply profile didn't
+	// resolve), use the backend profile as the source credentials.
+	if awsProfile == "" && backendProfile != "" {
+		awsProfile = backendProfile
 	}
 
 	// Write .terraform-version if missing and configured.
 	if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
 		if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+			slog.Warn("ensure terraform version", "root", root.Path, "err", err)
 			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 		} else if v != "" {
 			root.TFVersion = v
+			slog.Info("wrote .terraform-version", "root", root.Path, "version", v)
 			fmt.Fprintf(os.Stderr, "wrote .terraform-version: %s\n", v)
 		}
 	}
@@ -236,6 +246,14 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	if err := handleTFVersionCheck(root); err != nil {
 		return err
 	}
+
+	slog.Info("swoop action",
+		"action", action,
+		"root", root.Path,
+		"dir", root.Dir,
+		"aws_profile", awsProfile,
+		"tf_version", root.TFVersion,
+	)
 
 	// Print context.
 	fmt.Fprintf(os.Stderr, "root:    %s\n", root.Path)
@@ -255,8 +273,15 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	recordAction(baseDir, root.Path, action, result)
 
 	if err != nil {
+		slog.Warn("terraform action failed", "action", action, "root", root.Path, "err", err)
 		return fmt.Errorf("terraform %s failed: %w", action, err)
 	}
+	slog.Info("terraform action complete",
+		"action", action,
+		"root", root.Path,
+		"exit_code", result.ExitCode,
+		"plan_summary", result.PlanSummary,
+	)
 	return nil
 }
 
@@ -268,6 +293,11 @@ func handleTFVersionCheck(root swoop.Root) error {
 		return nil
 	}
 
+	slog.Warn("terraform version mismatch",
+		"root", root.Path,
+		"required", check.Required,
+		"installed", check.Installed,
+	)
 	if check.Installed != "" {
 		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from .terraform-version) but %s is active\n",
 			check.Required, check.Installed)
@@ -353,6 +383,11 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 
 	for i, root := range roots {
 		awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
+		if awsProfile == "" {
+			if bp := backendProfileFor(root, awsProfile); bp != "" {
+				awsProfile = bp
+			}
+		}
 
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)
@@ -360,18 +395,30 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		// Write .terraform-version if missing and configured.
 		if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
 			if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+				slog.Warn("ensure terraform version", "root", root.Path, "err", err)
 				fmt.Fprintf(os.Stderr, "  warning: %v\n", err)
 			} else if v != "" {
 				root.TFVersion = v
+				slog.Info("wrote .terraform-version", "root", root.Path, "version", v)
 				fmt.Fprintf(os.Stderr, "  wrote .terraform-version: %s\n", v)
 			}
 		}
 
 		check := swoop.CheckTFVersion(root)
 		if !check.OK {
+			slog.Warn("terraform version mismatch",
+				"root", root.Path,
+				"required", check.Required,
+				"installed", check.Installed,
+			)
 			fmt.Fprintf(os.Stderr, "  warning: requires terraform %s but %s is active\n", check.Required, check.Installed)
 		}
 
+		slog.Info("swoop batch action",
+			"action", action,
+			"root", root.Path,
+			"aws_profile", awsProfile,
+		)
 		execResult, err := swoop.RunTerraform(root, awsProfile, action)
 		recordAction(baseDir, root.Path, action, execResult)
 
@@ -382,6 +429,7 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		results[i] = br
 
 		if err != nil {
+			slog.Warn("swoop batch action failed", "action", action, "root", root.Path, "err", err)
 			fmt.Fprintf(os.Stderr, "  FAILED: %v\n", err)
 		}
 		fmt.Fprintln(os.Stderr)

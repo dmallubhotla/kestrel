@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/example/kestrel/internal/config"
@@ -47,10 +48,18 @@ target cluster and region fields.`,
 			return err
 		}
 
+		slog.Debug("config loaded", "chart", cfg.Helm.Chart, "iac_dir", cfg.Terraform.IACDir)
 		if verbose {
 			fmt.Fprintf(os.Stderr, "debug: config loaded (chart=%s, iac_dir=%s)\n",
 				cfg.Helm.Chart, cfg.Terraform.IACDir)
 		}
+
+		slog.Info("kestci invoked",
+			"command", cmd.CommandPath(),
+			"args", args,
+			"environment", environment,
+			"ci", guard.IsCI(),
+		)
 
 		return nil
 	},
@@ -85,6 +94,7 @@ func resolveTargetForCI(targetName string) (config.ResolvedTarget, error) {
 
 	// Set up kubeconfig if we have a cluster.
 	if target.Cluster != "" && target.Region != "" {
+		slog.Info("updating kubeconfig", "cluster", target.Cluster, "region", target.Region)
 		if verbose {
 			fmt.Fprintf(os.Stderr, "debug: updating kubeconfig for cluster %s in %s\n", target.Cluster, target.Region)
 		}

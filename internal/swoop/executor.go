@@ -2,12 +2,13 @@ package swoop
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/example/kestrel/internal/runner"
 )
 
 // ExecResult captures the outcome of a terraform execution.
@@ -37,50 +38,26 @@ type TFVersionCheck struct {
 
 // RunTerraform executes terraform with the given args in the root's directory.
 // Output is streamed to stdout/stderr. The awsProfile is injected as AWS_PROFILE
-// if non-empty.
+// if non-empty. Plan output is also captured so the summary line can be parsed.
 func RunTerraform(root Root, awsProfile string, args ...string) (*ExecResult, error) {
-	cmd := exec.Command("terraform", args...)
-	cmd.Dir = root.AbsPath
-	cmd.Stdin = os.Stdin
-	cmd.Stderr = os.Stderr
-
+	var env map[string]string
 	if awsProfile != "" {
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "AWS_PROFILE="+awsProfile)
+		env = map[string]string{"AWS_PROFILE": awsProfile}
 	}
 
-	// For plan, capture stdout to parse the summary while still streaming it.
-	var stdoutBuf bytes.Buffer
 	isPlan := len(args) > 0 && args[0] == "plan"
+
+	res, err := runner.RunWithOpts("terraform", args, runner.Options{
+		Dir:           root.AbsPath,
+		Env:           env,
+		CaptureStdout: isPlan,
+	})
+
+	out := &ExecResult{ExitCode: res.ExitCode}
 	if isPlan {
-		cmd.Stdout = &teeWriter{w: os.Stdout, buf: &stdoutBuf}
-	} else {
-		cmd.Stdout = os.Stdout
+		out.PlanSummary = parsePlanSummary(res.Stdout)
 	}
-
-	err := cmd.Run()
-	result := &ExecResult{}
-
-	if cmd.ProcessState != nil {
-		result.ExitCode = cmd.ProcessState.ExitCode()
-	}
-
-	if isPlan {
-		result.PlanSummary = parsePlanSummary(stdoutBuf.String())
-	}
-
-	return result, err
-}
-
-// teeWriter writes to both w and buf.
-type teeWriter struct {
-	w   *os.File
-	buf *bytes.Buffer
-}
-
-func (t *teeWriter) Write(p []byte) (int, error) {
-	t.buf.Write(p)
-	return t.w.Write(p)
+	return out, err
 }
 
 // parsePlanSummary extracts the plan summary from terraform plan output.

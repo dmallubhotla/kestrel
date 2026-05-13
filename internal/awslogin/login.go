@@ -2,6 +2,7 @@ package awslogin
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 )
@@ -15,9 +16,11 @@ func EnsureSession(profile string) error {
 	}
 
 	if sessionValid(profile) {
+		slog.Debug("aws session valid", "profile", profile)
 		return nil
 	}
 
+	slog.Info("aws sso login starting", "profile", profile)
 	fmt.Fprintf(os.Stderr, "AWS session expired for profile %q, running sso login...\n", profile)
 
 	cmd := exec.Command("aws", "sso", "login", "--profile", profile)
@@ -26,9 +29,11 @@ func EnsureSession(profile string) error {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
+		slog.Warn("aws sso login failed", "profile", profile, "err", err)
 		return fmt.Errorf("aws sso login failed for profile %q: %w", profile, err)
 	}
 
+	slog.Info("aws sso login complete", "profile", profile)
 	return nil
 }
 
