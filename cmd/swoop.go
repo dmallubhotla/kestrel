@@ -210,7 +210,7 @@ func compareRecent(a, b swoop.Root, state *swoop.State) bool {
 
 func printRootTable(roots []swoop.Root, state *swoop.State) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ROOT\tDIR\tAWS\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY")
+	fmt.Fprintln(w, "ROOT\tDIR\tAWS\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY\tMODIFIED")
 
 	for _, r := range roots {
 		init := "-"
@@ -235,7 +235,12 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 			aws = "-"
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Dir, aws, ver, init, dirty, activity)
+		modified := "-"
+		if !r.TFModified.IsZero() {
+			modified = relativeTime(r.TFModified)
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Dir, aws, ver, init, dirty, activity, modified)
 	}
 	w.Flush()
 

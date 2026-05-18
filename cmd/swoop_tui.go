@@ -198,11 +198,11 @@ func (m swoopTUIModel) viewRootPicker() string {
 
 		// Pre-compute row data for column width calculation.
 		type tuiRow struct {
-			path, dirTag, ver, activity string
-			initialized, dirty          bool
+			path, dirTag, ver, activity, modified string
+			initialized, dirty                    bool
 		}
 		rows := make([]tuiRow, end-start)
-		maxPath, maxDirTag, maxVer := 0, 0, 0
+		maxPath, maxDirTag, maxVer, maxActivity := 0, 0, 0, 0
 		for i := start; i < end; i++ {
 			r := m.filtered[i]
 			row := tuiRow{
@@ -211,9 +211,13 @@ func (m swoopTUIModel) viewRootPicker() string {
 				dirty:       r.GitDirty,
 				ver:         "-",
 				activity:    lastActivityStr(m.state, r.Path),
+				modified:    "-",
 			}
 			if r.TFVersion != "" {
 				row.ver = r.TFVersion
+			}
+			if !r.TFModified.IsZero() {
+				row.modified = relativeTime(r.TFModified)
 			}
 			// Show dir and AWS profile. Arrow indicates the AWS resolution.
 			tag := r.Dir
@@ -231,6 +235,9 @@ func (m swoopTUIModel) viewRootPicker() string {
 			}
 			if len(row.ver) > maxVer {
 				maxVer = len(row.ver)
+			}
+			if len(row.activity) > maxActivity {
+				maxActivity = len(row.activity)
 			}
 		}
 
@@ -255,18 +262,24 @@ func (m swoopTUIModel) viewRootPicker() string {
 			dirLabel := fmt.Sprintf("[%s]", row.dirTag)
 			paddedDir := fmt.Sprintf("%-*s", maxDirTag, dirLabel)
 			paddedVer := fmt.Sprintf("%-*s", maxVer, row.ver)
+			paddedActivity := fmt.Sprintf("%-*s", maxActivity, row.activity)
 
 			ver := paddedVer
 			if row.ver == "-" {
 				ver = swoopDimStyle.Render(paddedVer)
 			}
 
-			activity := row.activity
-			if activity == "-" {
-				activity = swoopDimStyle.Render(activity)
+			activity := paddedActivity
+			if row.activity == "-" {
+				activity = swoopDimStyle.Render(paddedActivity)
 			}
 
-			line := fmt.Sprintf("%s%s%s %s  %s  %s  %s",
+			modified := row.modified
+			if row.modified == "-" {
+				modified = swoopDimStyle.Render(row.modified)
+			}
+
+			line := fmt.Sprintf("%s%s%s %s  %s  %s  %s  %s",
 				cursor,
 				init,
 				dirty,
@@ -274,6 +287,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 				paddedDir,
 				ver,
 				activity,
+				modified,
 			)
 
 			if idx == m.cursor {
@@ -345,6 +359,9 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 		writeField("init", "yes")
 	} else {
 		writeField("init", "no")
+	}
+	if !r.TFModified.IsZero() {
+		writeField("modified", relativeTime(r.TFModified))
 	}
 
 	if m.state != nil {
