@@ -3,7 +3,6 @@ package runner
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"

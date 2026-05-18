@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 
@@ -10,7 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/example/kestrel/internal/config"
+	"github.com/example/kestrel/internal/kubeconfig"
 	"github.com/example/kestrel/internal/profile"
+	"github.com/example/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 
@@ -121,52 +125,132 @@ Add to your shell rc for automatic activation:
 }
 
 var profileUseCmd = &cobra.Command{
-	Use:   "use",
-	Short: "Interactively select a target profile",
+	Use:   "use [target|fuzzy-substring]",
+	Short: "Select a target profile (TUI when no arg, fuzzy match when given)",
+	Long: `Without an argument, opens an interactive picker over .kestconfig targets.
+
+With an argument, matches (case-insensitive substring) against target names and
+the kube-context short name (e.g. the cluster name in an EKS ARN). If exactly
+one target matches, it is selected immediately. If multiple match, the picker
+is opened pre-filtered to those.
+
+Selecting a target persists it as the active profile AND runs
+'kubectl config use-context' for the resolved kube context.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		targetNames := cfg.TargetNames()
 		if len(targetNames) == 0 {
 			return fmt.Errorf("no targets configured in .kestconfig")
 		}
 
-		current, _ := profile.Read()
-
-		items := make([]list.Item, len(targetNames))
-		initialIdx := 0
-		for i, name := range targetNames {
-			tc := cfg.Targets[name]
-			items[i] = targetItem{name: name, target: tc, cfg: cfg, active: name == current}
-			if name == current {
-				initialIdx = i
+		if len(args) == 1 {
+			matches := matchTargets(cfg, args[0])
+			switch len(matches) {
+			case 0:
+				return fmt.Errorf("no targets match %q (tried target names and kube-context short names)", args[0])
+			case 1:
+				return selectProfile(matches[0])
+			default:
+				targetNames = matches
 			}
 		}
 
-		delegate := targetItemDelegate{}
-		l := list.New(items, delegate, 40, min(len(items)+6, 20))
-		l.Title = "Select target"
-		l.SetShowStatusBar(false)
-		l.SetFilteringEnabled(false)
-		l.Select(initialIdx)
-		l.Styles.Title = lipgloss.NewStyle().Bold(true).Padding(0, 1)
-
-		m := pickerModel{list: l}
-		p := tea.NewProgram(m)
-		result, err := p.Run()
+		choice, err := runPicker(targetNames)
 		if err != nil {
 			return err
 		}
-
-		pm := result.(pickerModel)
-		if pm.choice == "" {
+		if choice == "" {
 			return nil // user cancelled
 		}
-
-		if err := profile.Write(pm.choice); err != nil {
-			return err
-		}
-		fmt.Printf("Active profile set to %q\n", pm.choice)
-		return nil
+		return selectProfile(choice)
 	},
+}
+
+// matchTargets returns target names whose name or kube-context short name
+// contains the given query (case-insensitive). An exact target-name match
+// short-circuits to that single result.
+func matchTargets(c *config.Config, query string) []string {
+	if query == "" {
+		return nil
+	}
+	if _, ok := c.Targets[query]; ok {
+		return []string{query}
+	}
+	q := strings.ToLower(query)
+	var matches []string
+	for _, name := range c.TargetNames() {
+		if strings.Contains(strings.ToLower(name), q) {
+			matches = append(matches, name)
+			continue
+		}
+		resolved, err := c.ResolveTarget(name)
+		if err != nil {
+			continue
+		}
+		if resolved.KubeContext == "" {
+			continue
+		}
+		short := strings.ToLower(kubeconfig.ShortName(resolved.KubeContext))
+		if strings.Contains(short, q) {
+			matches = append(matches, name)
+		}
+	}
+	return matches
+}
+
+// runPicker shows the bubbletea list and returns the chosen target name, or
+// "" if the user cancelled.
+func runPicker(targetNames []string) (string, error) {
+	current, _ := profile.Read()
+
+	items := make([]list.Item, len(targetNames))
+	initialIdx := 0
+	for i, name := range targetNames {
+		tc := cfg.Targets[name]
+		items[i] = targetItem{name: name, target: tc, cfg: cfg, active: name == current}
+		if name == current {
+			initialIdx = i
+		}
+	}
+
+	delegate := targetItemDelegate{}
+	l := list.New(items, delegate, 40, min(len(items)+6, 20))
+	l.Title = "Select target"
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	l.Select(initialIdx)
+	l.Styles.Title = lipgloss.NewStyle().Bold(true).Padding(0, 1)
+
+	m := pickerModel{list: l}
+	p := tea.NewProgram(m)
+	result, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+	return result.(pickerModel).choice, nil
+}
+
+// selectProfile persists the active profile and switches kubectl context.
+// The kubectl switch is best-effort: a failure logs a warning but does not
+// roll back the profile write (the user can retry kubectl themselves).
+func selectProfile(name string) error {
+	resolved, err := cfg.ResolveTarget(name)
+	if err != nil {
+		return err
+	}
+	if err := profile.Write(name); err != nil {
+		return err
+	}
+	fmt.Printf("Active profile set to %q\n", name)
+
+	if resolved.KubeContext == "" {
+		return nil
+	}
+	if err := runner.Run("kubectl", "config", "use-context", resolved.KubeContext); err != nil {
+		slog.Warn("kubectl use-context failed", "context", resolved.KubeContext, "err", err)
+		fmt.Fprintf(os.Stderr, "warning: kubectl config use-context %s failed: %v\n", resolved.KubeContext, err)
+	}
+	return nil
 }
 
 // --- bubbletea model ---
