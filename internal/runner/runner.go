@@ -68,7 +68,6 @@ func RunWithOpts(name string, args []string, opts Options) (*Result, error) {
 		cmd.Stdout = os.Stdout
 	}
 
-	fmt.Fprintf(os.Stderr, "debug: %s %s\n", name, strings.Join(args, " "))
 	slog.Debug("exec",
 		"command", name,
 		"args", args,
@@ -146,4 +145,3 @@ func exitCodeFromErr(err error) int {
 	}
 	return -1
 }
-
