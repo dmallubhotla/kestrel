@@ -36,11 +36,8 @@ release:
         echo "worktree dirty; commit or stash before releasing" >&2
         exit 1
     fi
-    echo "snth"
-    nix develop --command hanko stamp nix
-    echo "stamped"
-    ver=$(nix develop --command hanko version)
-    echo "${ver}"
+    hanko stamp nix
+    ver=$(hanko version)
     git add flake.nix
     git commit -m "Release ${ver}"
-    nix develop --command hanko tag --push
+    hanko tag --push
