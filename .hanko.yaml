@@ -1,0 +1,14 @@
+# kestrel's .hanko.yaml — used by `just release` (which calls `hanko seal`).
+#
+# The seal pipeline:
+#   1. Pre-flight (refuses dirty worktree / pre-release)
+#   2. Apply stamp-targets to the computed version
+#   3. Single release commit
+#   4. Annotated tag
+#   5. git push --atomic for commit + tag
+#
+# Preview with `just release-plan` before running for real.
+stamp-targets:
+  - path: flake.nix
+    format: nix
+    key: version

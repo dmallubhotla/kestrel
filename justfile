@@ -28,16 +28,12 @@ chores:
     nix develop --command go mod tidy
     nix develop --command gomod2nix
 
-# bump flake.nix to the hanko-computed semver, commit, tag, push
+# release: stamp flake.nix, commit, tag, push — all via `hanko seal`.
+# Reads .hanko.yaml for stamp-targets + seal config.
+# Preview with `just release-plan` before running for real.
 release:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -n "$(git status --porcelain)" ]; then
-        echo "worktree dirty; commit or stash before releasing" >&2
-        exit 1
-    fi
-    nix develop --command hanko stamp nix
-    ver=$(nix develop --command hanko version)
-    git add flake.nix
-    git commit -m "Release ${ver}"
-    nix develop --command hanko tag --push
+    nix develop --command hanko seal
+
+# release-plan: print what `just release` would do without mutating anything.
+release-plan:
+    nix develop --command hanko seal --dry-run
