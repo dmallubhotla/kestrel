@@ -113,9 +113,6 @@
       devShells = eachSystem (pkgs: {
         default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            terraform
-            terraform-ls
-            helm-ls
             go
             gotools
             golangci-lint
