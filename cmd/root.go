@@ -98,6 +98,12 @@ func ensureSSOSession(profile string) error {
 	return awslogin.EnsureSession(profile)
 }
 
+// SetBuildInfo wires build-time version/commit/date into the root command,
+// surfaced via `kest --version`. Stamped by hanko via ldflags at build time.
+func SetBuildInfo(version, commit, date string) {
+	rootCmd.Version = fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
+}
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
