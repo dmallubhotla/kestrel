@@ -49,7 +49,7 @@
       kestOverlay = final: _prev: {
         kest = final.buildGoApplication rec {
           pname = "kest";
-          version = "0.1.1";
+          version = "0.1.2";
           src = ./.;
           modules = ./gomod2nix.toml;
           nativeBuildInputs = [ final.installShellFiles ];
