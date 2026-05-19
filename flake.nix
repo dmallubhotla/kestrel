@@ -46,24 +46,27 @@
           ]
         );
       treefmtEval = eachSystem (pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
+      # Stamped by hanko; do not hand-edit (use `just release`).
+      # kest and kestci ship as one product — both inherit this version.
+      version = "0.1.2";
+      commonLdflags = [
+        "-s"
+        "-w"
+        "-X"
+        "main.version=${version}"
+        "-X"
+        "main.commit=${self.rev or self.dirtyRev or "unknown"}"
+        "-X"
+        "main.date=${self.lastModifiedDate or "unknown"}"
+      ];
       kestOverlay = final: _prev: {
-        kest = final.buildGoApplication rec {
+        kest = final.buildGoApplication {
           pname = "kest";
-          version = "0.1.2";
+          inherit version;
           src = ./.;
           modules = ./gomod2nix.toml;
           nativeBuildInputs = [ final.installShellFiles ];
-          # Stamped by hanko; do not hand-edit `version` above (use `just release`).
-          ldflags = [
-            "-s"
-            "-w"
-            "-X"
-            "main.version=${version}"
-            "-X"
-            "main.commit=${self.rev or self.dirtyRev or "unknown"}"
-            "-X"
-            "main.date=${self.lastModifiedDate or "unknown"}"
-          ];
+          ldflags = commonLdflags;
           postInstall = ''
             mv $out/bin/kestrel $out/bin/kest
             installShellCompletion --cmd kest \
@@ -72,23 +75,14 @@
               --fish <($out/bin/kest completion fish)
           '';
         };
-        kestci = final.buildGoApplication rec {
+        kestci = final.buildGoApplication {
           pname = "kestci";
-          version = "0.1.0";
+          inherit version;
           src = ./.;
           modules = ./gomod2nix.toml;
           subPackages = [ "cmd/kestci" ];
           nativeBuildInputs = [ final.installShellFiles ];
-          ldflags = [
-            "-s"
-            "-w"
-            "-X"
-            "main.version=${version}"
-            "-X"
-            "main.commit=${self.rev or self.dirtyRev or "unknown"}"
-            "-X"
-            "main.date=${self.lastModifiedDate or "unknown"}"
-          ];
+          ldflags = commonLdflags;
           postInstall = ''
             installShellCompletion --cmd kestci \
               --bash <($out/bin/kestci completion bash) \
