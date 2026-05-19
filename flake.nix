@@ -10,12 +10,17 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    hanko = {
+      url = "github:dmallubhotla/hanko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs =
     {
       self,
       nixpkgs,
       gomod2nix,
+      hanko,
       ...
     }@inputs:
     let
@@ -42,12 +47,23 @@
         );
       treefmtEval = eachSystem (pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
       kestOverlay = final: _prev: {
-        kest = final.buildGoApplication {
+        kest = final.buildGoApplication rec {
           pname = "kest";
           version = "0.1.0";
           src = ./.;
           modules = ./gomod2nix.toml;
           nativeBuildInputs = [ final.installShellFiles ];
+          # Stamped by hanko; do not hand-edit `version` above (use `just release`).
+          ldflags = [
+            "-s"
+            "-w"
+            "-X"
+            "main.version=${version}"
+            "-X"
+            "main.commit=${self.rev or self.dirtyRev or "unknown"}"
+            "-X"
+            "main.date=${self.lastModifiedDate or "unknown"}"
+          ];
           postInstall = ''
             mv $out/bin/kestrel $out/bin/kest
             installShellCompletion --cmd kest \
@@ -56,13 +72,23 @@
               --fish <($out/bin/kest completion fish)
           '';
         };
-        kestci = final.buildGoApplication {
+        kestci = final.buildGoApplication rec {
           pname = "kestci";
           version = "0.1.0";
           src = ./.;
           modules = ./gomod2nix.toml;
           subPackages = [ "cmd/kestci" ];
           nativeBuildInputs = [ final.installShellFiles ];
+          ldflags = [
+            "-s"
+            "-w"
+            "-X"
+            "main.version=${version}"
+            "-X"
+            "main.commit=${self.rev or self.dirtyRev or "unknown"}"
+            "-X"
+            "main.date=${self.lastModifiedDate or "unknown"}"
+          ];
           postInstall = ''
             installShellCompletion --cmd kestci \
               --bash <($out/bin/kestci completion bash) \
@@ -101,6 +127,7 @@
             go-tools
             gopls
             gomod2nix.packages.${pkgs.stdenv.hostPlatform.system}.default
+            hanko.packages.${pkgs.stdenv.hostPlatform.system}.default
           ];
           shellHook = ''
             echo "kestrel devshell"
