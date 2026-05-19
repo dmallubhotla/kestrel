@@ -65,6 +65,7 @@
           inherit version;
           src = ./.;
           modules = ./gomod2nix.toml;
+          subPackages = [ "." ];
           nativeBuildInputs = [ final.installShellFiles ];
           ldflags = commonLdflags;
           postInstall = ''
