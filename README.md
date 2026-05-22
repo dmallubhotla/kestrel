@@ -39,16 +39,16 @@ This lives on your machine and maps AWS account IDs to profiles, and cluster nam
 ```yaml
 aws:
   accounts:
-    "585912155334":
+    "123456712345":
       aws_profile: dev-sso
-    "593671994769":
+    "152637261526":
       aws_profile: prd-sso
   auto_sso_login: true          # auto aws sso login on expired sessions
 
 kubernetes:
   contexts:
-    eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
-    eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
+    eks-dev: arn:aws:eks:us-east-1:123456712345:cluster/eks-dev
+    eks-prd: arn:aws:eks:us-east-1:152637261526:cluster/eks-prd
     kind-local: kind-local
 ```
 
@@ -83,12 +83,6 @@ helm:
     - misc/chart/deploy-scripts/migrate.sh
 
   releases:
-    customer-25:
-      release_name: my-app-customer-25
-      target: dev
-      values:
-        - dev.yaml
-        - dev-customer-25.yaml
     other:
       release_name: my-app-other
       target: dev
@@ -138,16 +132,16 @@ eval "$(kest profile export)"
 ### Helm
 
 ```sh
-kest release deploy customer-25                  # deploy a single release
+kest release deploy other                        # deploy a single release
 kest release deploy --all                        # deploy all releases
 kest release deploy --all --target dev           # deploy all dev releases
-kest release deploy customer-25 --force          # bypass all safety guards
+kest release deploy other       --force          # bypass all safety guards
 kest release ls                                  # list configured releases
-kest release ls customer-25                      # query helm for release status
-kest release uninstall customer-25
+kest release ls other                            # query helm for release status
+kest release uninstall other
 ```
 
-Each release knows its target, so no `-e` flag is needed. Helm deploys layer `shared.yaml` (if present) then the release's explicit values files, resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
+Helm deploys layer `shared.yaml` (if present) then the release's explicit values files, resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
 
 ### Terraform
 
@@ -275,25 +269,25 @@ terraform:
 targets:
   # dev:
   #   cluster: eks-dev
-  #   aws_account: "585912155334"
+  #   aws_account: "123456712345"
   #   region: us-east-1
   # prod:
   #   cluster: eks-prd
-  #   aws_account: "593671994769"
+  #   aws_account: "123456712345"
   #   region: us-east-1
 
 # --- Directories (swoop: top-level dir → AWS account ID) ---
 directories:
-  # prd: "593671994769"
-  # dev: "585912155334"
+  # prd: "123456712345"
+  # dev: "161273827162"
 ```
 
 ## How resolution works
 
-When you run `kest release deploy customer-25`, here's what happens:
+When you run `kest release deploy other`, here's what happens:
 
-1. Kest finds your `.kestconfig` and looks up the `customer-25` release → gets target `dev`
-2. Looks up the `dev` target → gets cluster name `eks-dev`, account `585912155334`
+1. Kest finds your `.kestconfig` and looks up the `other` release → gets target `dev`
+2. Looks up the `dev` target → gets cluster name `eks-dev`, account `12345`
 3. Looks up `eks-dev` in your global config's contexts → gets the full EKS ARN
 4. Looks up that account ID in your global config's accounts → gets `aws_profile: dev-sso`
 5. Runs helm with `shared.yaml` + the release's values files, the right kube context, and AWS_PROFILE set
