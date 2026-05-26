@@ -114,8 +114,8 @@ func TestResolveAWSProfile_FallsBackToActiveTarget(t *testing.T) {
 func TestResolveAWSProfile_MultipleDirsSameAccount(t *testing.T) {
 	cfg := &config.Config{
 		Directories: map[string]string{
-			"prd":        "444455556666",
-			"ci":         "444455556666",
+			"prd":          "444455556666",
+			"ci":           "444455556666",
 			"example-prod": "444455556666",
 		},
 		AWS: config.AWSConfig{
