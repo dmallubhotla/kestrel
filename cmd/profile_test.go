@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/example/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/config"
 )
 
 func TestMatchTargets(t *testing.T) {

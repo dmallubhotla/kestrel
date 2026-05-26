@@ -11,10 +11,10 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/example/kestrel/internal/config"
-	"github.com/example/kestrel/internal/kubeconfig"
-	"github.com/example/kestrel/internal/profile"
-	"github.com/example/kestrel/internal/runner"
+	"github.com/dmallubhotla/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
+	"github.com/dmallubhotla/kestrel/internal/profile"
+	"github.com/dmallubhotla/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 

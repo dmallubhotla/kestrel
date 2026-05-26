@@ -8,9 +8,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/example/kestrel/internal/guard"
-	"github.com/example/kestrel/internal/resolve"
-	"github.com/example/kestrel/internal/swoop"
+	"github.com/dmallubhotla/kestrel/internal/guard"
+	"github.com/dmallubhotla/kestrel/internal/resolve"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

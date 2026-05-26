@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/example/kestrel/internal/resolve"
-	"github.com/example/kestrel/internal/swoop"
+	"github.com/dmallubhotla/kestrel/internal/resolve"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 )
 
 // swoopAction is the action the user selected from the TUI.

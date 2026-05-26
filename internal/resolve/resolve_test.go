@@ -3,7 +3,7 @@ package resolve
 import (
 	"testing"
 
-	"github.com/example/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/config"
 )
 
 func TestAWSProfileForRoot_DirectoryMapping(t *testing.T) {

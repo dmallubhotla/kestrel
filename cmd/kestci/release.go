@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/example/kestrel/internal/guard"
-	"github.com/example/kestrel/internal/helm"
-	"github.com/example/kestrel/internal/runner"
+	"github.com/dmallubhotla/kestrel/internal/guard"
+	"github.com/dmallubhotla/kestrel/internal/helm"
+	"github.com/dmallubhotla/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 

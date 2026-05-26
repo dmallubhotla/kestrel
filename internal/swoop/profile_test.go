@@ -3,7 +3,7 @@ package swoop
 import (
 	"testing"
 
-	"github.com/example/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/config"
 )
 
 func TestResolveAWSProfile_DirectoryMapping(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/example/kestrel/internal/kubeconfig"
+	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
 )
 
 func TestMergeContextSources(t *testing.T) {

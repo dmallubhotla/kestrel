@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/example/kestrel/internal/config"
-	"github.com/example/kestrel/internal/runner"
+	"github.com/dmallubhotla/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/runner"
 )
 
 func envMap(awsProfile string) map[string]string {

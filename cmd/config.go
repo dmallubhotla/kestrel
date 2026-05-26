@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/example/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/config"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
