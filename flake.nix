@@ -48,7 +48,7 @@
       treefmtEval = eachSystem (pkgs: inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix);
       # Stamped by hanko; do not hand-edit (use `just release`).
       # kest and kestci ship as one product — both inherit this version.
-      version = "0.1.4";
+      version = "0.1.5";
       commonLdflags = [
         "-s"
         "-w"
