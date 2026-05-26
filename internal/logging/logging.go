@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/example/kestrel/internal/profile"
+	"github.com/dmallubhotla/kestrel/internal/profile"
 )
 
 var logFile *os.File

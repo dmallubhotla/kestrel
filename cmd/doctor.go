@@ -10,12 +10,12 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/example/kestrel/internal/awsconfig"
-	"github.com/example/kestrel/internal/config"
-	"github.com/example/kestrel/internal/kubeconfig"
-	"github.com/example/kestrel/internal/logging"
-	"github.com/example/kestrel/internal/runner"
-	"github.com/example/kestrel/internal/swoop"
+	"github.com/dmallubhotla/kestrel/internal/awsconfig"
+	"github.com/dmallubhotla/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
+	"github.com/dmallubhotla/kestrel/internal/logging"
+	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

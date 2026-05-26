@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/example/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/config"
 )
 
 func TestMatchTargets(t *testing.T) {
@@ -18,9 +18,9 @@ func TestMatchTargets(t *testing.T) {
 		},
 		Kubernetes: config.KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev":     "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev",
-				"eks-prod":    "arn:aws:eks:us-east-1:222222222222:cluster/eks-prod",
-				"eks-staging": "arn:aws:eks:us-east-1:333333333333:cluster/eks-staging",
+				"eks-dev":     "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
+				"eks-prod":    "arn:aws:eks:us-east-1:444455556666:cluster/eks-prod",
+				"eks-staging": "arn:aws:eks:us-east-1:777788889999:cluster/eks-staging",
 				"kind-local":  "kind-local",
 			},
 		},
@@ -62,9 +62,9 @@ func TestMatchTargetsMultiple(t *testing.T) {
 		},
 		Kubernetes: config.KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev-east": "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev-east",
-				"eks-dev-west": "arn:aws:eks:us-west-2:111111111111:cluster/eks-dev-west",
-				"eks-prod":     "arn:aws:eks:us-east-1:222222222222:cluster/eks-prod",
+				"eks-dev-east": "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev-east",
+				"eks-dev-west": "arn:aws:eks:us-west-2:111122223333:cluster/eks-dev-west",
+				"eks-prod":     "arn:aws:eks:us-east-1:444455556666:cluster/eks-prod",
 			},
 		},
 	}

@@ -8,8 +8,8 @@ import (
 	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/example/kestrel/internal/resolve"
-	"github.com/example/kestrel/internal/swoop"
+	"github.com/dmallubhotla/kestrel/internal/resolve"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

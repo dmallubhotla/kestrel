@@ -8,7 +8,7 @@
 package cmd
 
 import (
-	"github.com/example/kestrel/internal/terraform"
+	"github.com/dmallubhotla/kestrel/internal/terraform"
 	"github.com/spf13/cobra"
 )
 

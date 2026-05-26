@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/example/kestrel/internal/swoop"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

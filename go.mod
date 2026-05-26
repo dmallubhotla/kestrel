@@ -1,4 +1,4 @@
-module github.com/example/kestrel
+module github.com/dmallubhotla/kestrel
 
 go 1.24.2
 

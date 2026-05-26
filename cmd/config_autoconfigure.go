@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/example/kestrel/internal/awsconfig"
-	"github.com/example/kestrel/internal/config"
-	"github.com/example/kestrel/internal/kubeconfig"
+	"github.com/dmallubhotla/kestrel/internal/awsconfig"
+	"github.com/dmallubhotla/kestrel/internal/config"
+	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

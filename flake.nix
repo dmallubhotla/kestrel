@@ -25,10 +25,10 @@
     }@inputs:
     let
       supportedSystems = [
-        "aarch64-darwin"
-        "arm64-darwin"
-        "x86_64-darwin"
         "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+        "x86_64-darwin"
       ];
       eachSystem = f: nixpkgs.lib.genAttrs supportedSystems (system: f (pkgsFor system));
       pkgsFor =

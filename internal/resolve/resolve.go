@@ -3,7 +3,7 @@
 // implementing their own resolution.
 package resolve
 
-import "github.com/example/kestrel/internal/config"
+import "github.com/dmallubhotla/kestrel/internal/config"
 
 // AWSProfileForRoot determines the AWS_PROFILE for a terraform root by
 // checking, in order:

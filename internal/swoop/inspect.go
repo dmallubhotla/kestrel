@@ -63,13 +63,13 @@ func InspectDirs(roots []Root, baseDir string) []DirInfo {
 	return result
 }
 
-// allowedAccountRe matches allowed_account_ids = ["123456789012"]
+// allowedAccountRe matches allowed_account_ids = ["111122223333"]
 var allowedAccountRe = regexp.MustCompile(`allowed_account_ids\s*=\s*\["(\d{12})"\]`)
 
 // hclAccountRe matches common HCL patterns for account IDs in terragrunt configs:
 //
-//	aws_account_id = "123456789012"
-//	account_id     = "123456789012"
+//	aws_account_id = "111122223333"
+//	account_id     = "111122223333"
 var hclAccountRe = regexp.MustCompile(`(?:aws_)?account_id\s*=\s*"(\d{12})"`)
 
 // regionRe matches AWS region declarations in provider blocks:
@@ -79,7 +79,7 @@ var regionRe = regexp.MustCompile(`region\s*=\s*"([a-z]+-[a-z]+-\d+)"`)
 
 // roleArnAccountRe matches the 12-digit account ID inside an IAM role ARN:
 //
-//	role_arn = "arn:aws:iam::593671994769:role/tf-runner"
+//	role_arn = "arn:aws:iam::444455556666:role/tf-runner"
 var roleArnAccountRe = regexp.MustCompile(`role_arn\s*=\s*"arn:aws:iam::(\d{12}):role/[^"]+"`)
 
 // backendProfileRe matches a profile attribute inside the backend block:
