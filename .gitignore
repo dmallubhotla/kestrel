@@ -52,3 +52,6 @@ result
 .env
 *.env
 .envrc
+
+# Claude Code per-user settings
+.claude/settings.local.json
