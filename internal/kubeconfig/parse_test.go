@@ -1,6 +1,8 @@
 package kubeconfig
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,6 +53,96 @@ contexts: []
 	}
 	if len(contexts) != 0 {
 		t.Fatalf("got %d contexts, want 0", len(contexts))
+	}
+}
+
+func TestReadContextsMergesMultipleFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	fileA := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(fileA, []byte(`
+apiVersion: v1
+kind: Config
+contexts:
+- name: shared
+  context:
+    cluster: cluster-a
+    namespace: from-a
+- name: only-a
+  context:
+    cluster: cluster-a
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fileB := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(fileB, []byte(`
+apiVersion: v1
+kind: Config
+contexts:
+- name: shared
+  context:
+    cluster: cluster-b
+    namespace: from-b
+- name: only-b
+  context:
+    cluster: cluster-b
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("KUBECONFIG", fileA+string(filepath.ListSeparator)+fileB)
+
+	ctxs, err := ReadContexts()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(ctxs) != 3 {
+		t.Fatalf("got %d contexts, want 3 (shared+only-a+only-b)", len(ctxs))
+	}
+
+	byName := make(map[string]Context, len(ctxs))
+	for _, c := range ctxs {
+		byName[c.Name] = c
+	}
+
+	// First-wins: "shared" should come from fileA.
+	if byName["shared"].Namespace != "from-a" {
+		t.Errorf("shared.Namespace = %q, want from-a (first-wins)", byName["shared"].Namespace)
+	}
+	if _, ok := byName["only-a"]; !ok {
+		t.Errorf("missing only-a context")
+	}
+	if _, ok := byName["only-b"]; !ok {
+		t.Errorf("missing only-b context")
+	}
+}
+
+func TestReadContextsSkipsEmptyEntries(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "kc.yaml")
+	if err := os.WriteFile(file, []byte(`
+apiVersion: v1
+kind: Config
+contexts:
+- name: solo
+  context:
+    cluster: solo
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Leading/trailing/empty entries (e.g. "::file") must not cause errors.
+	sep := string(filepath.ListSeparator)
+	t.Setenv("KUBECONFIG", sep+file+sep)
+
+	ctxs, err := ReadContexts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ctxs) != 1 || ctxs[0].Name != "solo" {
+		t.Fatalf("got %+v, want [solo]", ctxs)
 	}
 }
 

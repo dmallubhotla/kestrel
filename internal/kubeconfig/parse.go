@@ -31,14 +31,32 @@ type contextDetail struct {
 	Namespace string `yaml:"namespace"`
 }
 
-// ReadContexts parses ~/.kube/config and returns all context entries.
+// ReadContexts parses the kubeconfig file(s) and returns all context entries.
+// If KUBECONFIG lists multiple files (separated by the OS list separator),
+// contexts from all files are concatenated. When the same context name appears
+// in more than one file, the first occurrence wins (matching kubectl).
 func ReadContexts() ([]Context, error) {
-	path := kubeConfigPath()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
+	paths := kubeConfigPaths()
+	seen := make(map[string]struct{})
+	var merged []Context
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", path, err)
+		}
+		ctxs, err := ParseContexts(data)
+		if err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", path, err)
+		}
+		for _, c := range ctxs {
+			if _, dup := seen[c.Name]; dup {
+				continue
+			}
+			seen[c.Name] = struct{}{}
+			merged = append(merged, c)
+		}
 	}
-	return ParseContexts(data)
+	return merged, nil
 }
 
 // ParseContexts extracts contexts from kubeconfig YAML bytes.
@@ -81,16 +99,21 @@ func ExtractAccountID(arnOrName string) string {
 	return ""
 }
 
-func kubeConfigPath() string {
+func kubeConfigPaths() []string {
 	if v := os.Getenv("KUBECONFIG"); v != "" {
-		// Take the first path if multiple are specified.
-		if i := strings.IndexByte(v, ':'); i >= 0 {
-			return v[:i]
+		raw := filepath.SplitList(v)
+		paths := make([]string, 0, len(raw))
+		for _, p := range raw {
+			if p != "" {
+				paths = append(paths, p)
+			}
 		}
-		return v
+		if len(paths) > 0 {
+			return paths
+		}
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".kube", "config")
+	return []string{filepath.Join(home, ".kube", "config")}
 }
 
 // BestMatch returns the index of the kube context that best matches the
