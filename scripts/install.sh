@@ -43,7 +43,7 @@ parse_args() {
   _version="${KESTREL_VERSION:-}"
   _install_dir="${KESTREL_INSTALL_DIR:-$HOME/.local/bin}"
   _skip_kestci=0
-  [[ "${KESTREL_SKIP_KESTCI:-}" == "1" ]] && _skip_kestci=1
+  [[ ${KESTREL_SKIP_KESTCI:-} == "1" ]] && _skip_kestci=1
 
   while :; do
     case "${1-}" in
@@ -82,26 +82,26 @@ detect_target() {
   arch="$(uname -m)"
 
   case "${os}" in
-    Linux)  os_tag='linux' ;;
-    Darwin) os_tag='darwin' ;;
-    *)      fail "unsupported OS: ${os} (kestrel ships linux and darwin builds only)" ;;
+  Linux) os_tag='linux' ;;
+  Darwin) os_tag='darwin' ;;
+  *) fail "unsupported OS: ${os} (kestrel ships linux and darwin builds only)" ;;
   esac
 
   case "${arch}" in
-    x86_64 | amd64)  arch_tag='amd64' ;;
-    arm64 | aarch64) arch_tag='arm64' ;;
-    *)               fail "unsupported architecture: ${arch}" ;;
+  x86_64 | amd64) arch_tag='amd64' ;;
+  arm64 | aarch64) arch_tag='arm64' ;;
+  *) fail "unsupported architecture: ${arch}" ;;
   esac
 
   _target="${os_tag}-${arch_tag}"
   case "${_target}" in
-    linux-amd64 | linux-arm64 | darwin-arm64) ;;
-    *) fail "no prebuilt binary for ${_target} (supported: linux-amd64, linux-arm64, darwin-arm64)" ;;
+  linux-amd64 | linux-arm64 | darwin-arm64) ;;
+  *) fail "no prebuilt binary for ${_target} (supported: linux-amd64, linux-arm64, darwin-arm64)" ;;
   esac
 }
 
 resolve_release_url() {
-  if [[ -n "${_version}" ]]; then
+  if [[ -n ${_version} ]]; then
     _release_url="https://github.com/${REPO}/releases/download/${_version}"
     _version_label="${_version}"
   else
@@ -122,15 +122,15 @@ fetch() {
 verify_checksum() {
   local file="$1" sums="$2" line
   line="$(grep "  $(basename "${file}")\$" "${sums}" || true)"
-  [[ -n "${line}" ]] || fail "no checksum entry for $(basename "${file}") in checksums.txt"
-  ( cd "$(dirname "${file}")" && printf '%s\n' "${line}" | ${_checksum_cmd} -c - >/dev/null ) \
-    || fail "checksum verification failed for $(basename "${file}")"
+  [[ -n ${line} ]] || fail "no checksum entry for $(basename "${file}") in checksums.txt"
+  (cd "$(dirname "${file}")" && printf '%s\n' "${line}" | ${_checksum_cmd} -c - >/dev/null) ||
+    fail "checksum verification failed for $(basename "${file}")"
 }
 
 parse_args "$@"
 
-command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 \
-  || fail "curl or wget is required"
+command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 ||
+  fail "curl or wget is required"
 
 if command -v sha256sum >/dev/null 2>&1; then
   _checksum_cmd='sha256sum'
@@ -144,9 +144,9 @@ detect_target
 resolve_release_url
 
 _binaries=(kest)
-[[ "${_skip_kestci}" -eq 0 ]] && _binaries+=(kestci)
+[[ ${_skip_kestci} -eq 0 ]] && _binaries+=(kestci)
 
-if [[ "${_verbose}" -eq 1 ]]; then
+if [[ ${_verbose} -eq 1 ]]; then
   log "target:       ${_target}"
   log "version:      ${_version_label}"
   log "install dir:  ${_install_dir}"
@@ -175,12 +175,12 @@ for _bin in "${_binaries[@]}"; do
 done
 
 case ":${PATH}:" in
-  *":${_install_dir}:"*) ;;
-  *)
-    log ""
-    log "NOTE: ${_install_dir} is not on your PATH. Add this to your shell rc:"
-    log "  export PATH=\"${_install_dir}:\$PATH\""
-    ;;
+*":${_install_dir}:"*) ;;
+*)
+  log ""
+  log "NOTE: ${_install_dir} is not on your PATH. Add this to your shell rc:"
+  log "  export PATH=\"${_install_dir}:\$PATH\""
+  ;;
 esac
 
 log "Done. Try: kest --version"
