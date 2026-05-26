@@ -56,13 +56,13 @@ output = json
 [profile acme-dev]
 region = us-east-1
 sso_start_url = https://acme.awsapps.com/start
-sso_account_id = 111111111111
+sso_account_id = 111122223333
 sso_role_name = DevAccess
 sso_region = us-east-1
 
 [profile acme-prod]
 region = us-east-1
-role_arn = arn:aws:iam::123456789012:role/ProdRole
+role_arn = arn:aws:iam::444455556666:role/ProdRole
 source_profile = default
 `
 

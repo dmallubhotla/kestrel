@@ -9,9 +9,9 @@ func TestParseContexts(t *testing.T) {
 apiVersion: v1
 kind: Config
 contexts:
-- name: arn:aws:eks:us-east-1:111111111111:cluster/acme-dev
+- name: arn:aws:eks:us-east-1:111122223333:cluster/acme-dev
   context:
-    cluster: arn:aws:eks:us-east-1:111111111111:cluster/acme-dev
+    cluster: arn:aws:eks:us-east-1:111122223333:cluster/acme-dev
     namespace: app
 - name: acme-prod
   context:
@@ -31,7 +31,7 @@ contexts:
 		t.Fatalf("got %d contexts, want 3", len(contexts))
 	}
 
-	if contexts[0].Name != "arn:aws:eks:us-east-1:111111111111:cluster/acme-dev" {
+	if contexts[0].Name != "arn:aws:eks:us-east-1:111122223333:cluster/acme-dev" {
 		t.Errorf("contexts[0].Name = %q", contexts[0].Name)
 	}
 	if contexts[0].Namespace != "app" {
@@ -56,19 +56,19 @@ contexts: []
 
 func TestBestMatchAccountID(t *testing.T) {
 	contexts := []Context{
-		{Name: "arn:aws:eks:us-east-1:111111111111:cluster/acme-dev"},
-		{Name: "arn:aws:eks:us-east-1:222222222222:cluster/acme-prod"},
+		{Name: "arn:aws:eks:us-east-1:111122223333:cluster/acme-dev"},
+		{Name: "arn:aws:eks:us-east-1:444455556666:cluster/acme-prod"},
 		{Name: "minikube"},
 	}
 
 	// Account ID match.
-	idx := BestMatch("acme-dev", "111111111111", contexts)
+	idx := BestMatch("acme-dev", "111122223333", contexts)
 	if idx != 0 {
 		t.Errorf("account ID match: got %d, want 0", idx)
 	}
 
 	// Account ID match for prod.
-	idx = BestMatch("acme-prod", "222222222222", contexts)
+	idx = BestMatch("acme-prod", "444455556666", contexts)
 	if idx != 1 {
 		t.Errorf("account ID match prod: got %d, want 1", idx)
 	}
@@ -119,16 +119,16 @@ func TestBestMatchNoMatch(t *testing.T) {
 func TestBestMatchAccountIDWithNameDisambiguation(t *testing.T) {
 	// Two clusters in the same account — name should disambiguate.
 	contexts := []Context{
-		{Name: "arn:aws:eks:us-east-1:111111111111:cluster/acme-dev"},
-		{Name: "arn:aws:eks:us-east-1:111111111111:cluster/acme-staging"},
+		{Name: "arn:aws:eks:us-east-1:111122223333:cluster/acme-dev"},
+		{Name: "arn:aws:eks:us-east-1:111122223333:cluster/acme-staging"},
 	}
 
-	idx := BestMatch("acme-dev", "111111111111", contexts)
+	idx := BestMatch("acme-dev", "111122223333", contexts)
 	if idx != 0 {
 		t.Errorf("disambiguated: got %d, want 0", idx)
 	}
 
-	idx = BestMatch("acme-staging", "111111111111", contexts)
+	idx = BestMatch("acme-staging", "111122223333", contexts)
 	if idx != 1 {
 		t.Errorf("disambiguated staging: got %d, want 1", idx)
 	}
@@ -139,8 +139,8 @@ func TestShortName(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"arn:aws:eks:us-east-1:111111111111:cluster/acme-dev", "acme-dev"},
-		{"arn:aws:eks:eu-west-1:222222222222:cluster/prod-eu", "prod-eu"},
+		{"arn:aws:eks:us-east-1:111122223333:cluster/acme-dev", "acme-dev"},
+		{"arn:aws:eks:eu-west-1:444455556666:cluster/prod-eu", "prod-eu"},
 		{"acme-prod", "acme-prod"},
 		{"minikube", "minikube"},
 	}
@@ -157,7 +157,7 @@ func TestExtractAccountID(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"arn:aws:eks:us-east-1:111111111111:cluster/acme-dev", "111111111111"},
+		{"arn:aws:eks:us-east-1:111122223333:cluster/acme-dev", "111122223333"},
 		{"acme-prod", ""},
 		{"minikube", ""},
 	}

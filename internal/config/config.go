@@ -380,7 +380,7 @@ func sortedKeys[V any](m map[string]V) []string {
 }
 
 // ExtractAccountIDFromARN extracts the AWS account ID from an EKS ARN.
-// e.g. "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" → "585912155334"
+// e.g. "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev" → "111122223333"
 // Returns empty string if the context is not an ARN.
 func ExtractAccountIDFromARN(ctx string) string {
 	// ARN format: arn:partition:service:region:account-id:resource

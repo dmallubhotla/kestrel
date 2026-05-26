@@ -47,7 +47,7 @@ terraform {
 
 provider "aws" {
   region              = "us-east-1"
-  allowed_account_ids = ["585912155334"]
+  allowed_account_ids = ["111122223333"]
 }
 `), 0o644)
 
@@ -61,8 +61,8 @@ provider "aws" {
 		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
 
-	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "585912155334" {
-		t.Errorf("expected account ID 585912155334, got %v", dirs[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "111122223333" {
+		t.Errorf("expected account ID 111122223333, got %v", dirs[0].AccountIDs)
 	}
 }
 
@@ -81,7 +81,7 @@ remote_state {
 }
 
 inputs = {
-  aws_account_id = "593671994769"
+  aws_account_id = "444455556666"
 }
 `), 0o644)
 
@@ -111,8 +111,8 @@ terraform {
 		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
 
-	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "593671994769" {
-		t.Errorf("expected account ID 593671994769 from ancestor HCL, got %v", dirs[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "444455556666" {
+		t.Errorf("expected account ID 444455556666 from ancestor HCL, got %v", dirs[0].AccountIDs)
 	}
 }
 
@@ -131,7 +131,7 @@ terraform {
 `), 0o644)
 	os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte(`
 inputs = {
-  account_id = "585912155334"
+  account_id = "111122223333"
 }
 `), 0o644)
 
@@ -144,8 +144,8 @@ inputs = {
 	if len(dirs) != 1 {
 		t.Fatalf("expected 1 dir, got %d", len(dirs))
 	}
-	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "585912155334" {
-		t.Errorf("expected account ID 585912155334 from HCL in root, got %v", dirs[0].AccountIDs)
+	if len(dirs[0].AccountIDs) != 1 || dirs[0].AccountIDs[0] != "111122223333" {
+		t.Errorf("expected account ID 111122223333 from HCL in root, got %v", dirs[0].AccountIDs)
 	}
 }
 
@@ -156,19 +156,19 @@ terraform {
   backend "s3" {
     bucket      = "example-iac-tfstate"
     key         = "dev/vpc/terraform.tfstate"
-    assume_role = { role_arn = "arn:aws:iam::593671994769:role/tf-runner" }
+    assume_role = { role_arn = "arn:aws:iam::444455556666:role/tf-runner" }
   }
 }
 
 provider "aws" {
   region              = "us-east-1"
-  allowed_account_ids = ["585912155334"]
-  assume_role { role_arn = "arn:aws:iam::585912155334:role/dev-deployer" }
+  allowed_account_ids = ["111122223333"]
+  assume_role { role_arn = "arn:aws:iam::111122223333:role/dev-deployer" }
 }
 `), 0o644)
 
 	got := ExtractBackendAuth(dir)
-	want := BackendAuth{AccountID: "593671994769"}
+	want := BackendAuth{AccountID: "444455556666"}
 	if got != want {
 		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
 	}
@@ -180,13 +180,13 @@ func TestExtractBackendAuth_TopLevelRoleArn(t *testing.T) {
 terraform {
   backend "s3" {
     bucket   = "example-iac-tfstate"
-    role_arn = "arn:aws:iam::732277778391:role/dr-deployer"
+    role_arn = "arn:aws:iam::777788889999:role/dr-deployer"
   }
 }
 `), 0o644)
 
 	got := ExtractBackendAuth(dir)
-	want := BackendAuth{AccountID: "732277778391"}
+	want := BackendAuth{AccountID: "777788889999"}
 	if got != want {
 		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
 	}
@@ -230,7 +230,7 @@ terraform {
 provider "aws" {
   region  = "us-east-1"
   profile = "example-dev"
-  assume_role { role_arn = "arn:aws:iam::585912155334:role/dev-deployer" }
+  assume_role { role_arn = "arn:aws:iam::111122223333:role/dev-deployer" }
 }
 `), 0o644)
 
@@ -278,14 +278,14 @@ terraform {
   backend "s3" {
     bucket = "example-iac-tfstate"
     assume_role {
-      role_arn = "arn:aws:iam::593671994769:role/tf-runner"
+      role_arn = "arn:aws:iam::444455556666:role/tf-runner"
     }
   }
 }
 `), 0o644)
 
 	got := ExtractBackendAuth(dir)
-	want := BackendAuth{AccountID: "593671994769"}
+	want := BackendAuth{AccountID: "444455556666"}
 	if got != want {
 		t.Errorf("ExtractBackendAuth = %+v, want %+v", got, want)
 	}

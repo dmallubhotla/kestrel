@@ -36,20 +36,20 @@ targets:
 
 aws:
   accounts:
-    "585912155334":
+    "111122223333":
       aws_profile: dev-sso
-    "593671994769":
+    "444455556666":
       aws_profile: prd-sso
 
 kubernetes:
   contexts:
-    eks-dev: arn:aws:eks:us-east-1:585912155334:cluster/eks-dev
-    eks-prd: arn:aws:eks:us-east-1:593671994769:cluster/eks-prd
+    eks-dev: arn:aws:eks:us-east-1:111122223333:cluster/eks-dev
+    eks-prd: arn:aws:eks:us-east-1:444455556666:cluster/eks-prd
     kind-local: kind-local
 
 directories:
-  prd: "593671994769"
-  dev: "585912155334"
+  prd: "444455556666"
+  dev: "111122223333"
 `), 0o644)
 
 	cfg, err := loadFile(path)
@@ -85,15 +85,15 @@ directories:
 	if len(cfg.AWS.Accounts) != 2 {
 		t.Fatalf("expected 2 accounts, got %d", len(cfg.AWS.Accounts))
 	}
-	if cfg.AWS.Accounts["585912155334"].AwsProfile != "dev-sso" {
-		t.Errorf("accounts[585912155334] = %q", cfg.AWS.Accounts["585912155334"].AwsProfile)
+	if cfg.AWS.Accounts["111122223333"].AwsProfile != "dev-sso" {
+		t.Errorf("accounts[111122223333] = %q", cfg.AWS.Accounts["111122223333"].AwsProfile)
 	}
 
-	if cfg.Kubernetes.Contexts["eks-dev"] != "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" {
+	if cfg.Kubernetes.Contexts["eks-dev"] != "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev" {
 		t.Errorf("contexts[eks-dev] = %q", cfg.Kubernetes.Contexts["eks-dev"])
 	}
 
-	if cfg.Directories["prd"] != "593671994769" {
+	if cfg.Directories["prd"] != "444455556666" {
 		t.Errorf("directories[prd] = %q", cfg.Directories["prd"])
 	}
 }
@@ -105,11 +105,11 @@ func TestLoadFile_TargetWithAccountAndRegion(t *testing.T) {
 targets:
   dev:
     cluster: eks-dev
-    aws_account: "585912155334"
+    aws_account: "111122223333"
     region: us-east-1
   prod:
     cluster: eks-prod
-    aws_account: "593671994769"
+    aws_account: "444455556666"
     region: us-east-1
   local:
     cluster: kind-local
@@ -124,7 +124,7 @@ targets:
 	if dev.Cluster != "eks-dev" {
 		t.Errorf("dev.Cluster = %q", dev.Cluster)
 	}
-	if dev.AWSAccount != "585912155334" {
+	if dev.AWSAccount != "111122223333" {
 		t.Errorf("dev.AWSAccount = %q", dev.AWSAccount)
 	}
 	if dev.Region != "us-east-1" {
@@ -225,12 +225,12 @@ func TestCompose_ProjectOverridesUser(t *testing.T) {
 		Helm: HelmConfig{Chart: "user-chart", Namespace: "user-ns"},
 		AWS: AWSConfig{
 			Accounts: map[string]AWSAccountConfig{
-				"585912155334": {AwsProfile: "dev-sso"},
+				"111122223333": {AwsProfile: "dev-sso"},
 			},
 		},
 		Kubernetes: KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+				"eks-dev": "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
 			},
 		},
 	}
@@ -271,8 +271,8 @@ func TestCompose_ProjectOverridesUser(t *testing.T) {
 		t.Fatalf("expected 2 targets, got %d", len(out.Targets))
 	}
 	// AWS accounts from user preserved.
-	if out.AWS.Accounts["585912155334"].AwsProfile != "dev-sso" {
-		t.Errorf("AWS.Accounts[585912155334] = %v", out.AWS.Accounts["585912155334"])
+	if out.AWS.Accounts["111122223333"].AwsProfile != "dev-sso" {
+		t.Errorf("AWS.Accounts[111122223333] = %v", out.AWS.Accounts["111122223333"])
 	}
 	// Kubernetes contexts from user preserved.
 	if out.Kubernetes.Contexts["eks-dev"] == "" {
@@ -292,12 +292,12 @@ func TestResolveTarget(t *testing.T) {
 		},
 		AWS: AWSConfig{
 			Accounts: map[string]AWSAccountConfig{
-				"585912155334": {AwsProfile: "dev-sso"},
+				"111122223333": {AwsProfile: "dev-sso"},
 			},
 		},
 		Kubernetes: KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev":    "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+				"eks-dev":    "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
 				"kind-local": "kind-local",
 			},
 		},
@@ -308,14 +308,14 @@ func TestResolveTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveTarget(dev): %v", err)
 	}
-	if resolved.KubeContext != "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev" {
+	if resolved.KubeContext != "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev" {
 		t.Errorf("dev.KubeContext = %q", resolved.KubeContext)
 	}
 	if resolved.AwsProfile != "dev-sso" {
 		t.Errorf("dev.AwsProfile = %q", resolved.AwsProfile)
 	}
-	if resolved.AccountID != "585912155334" {
-		t.Errorf("dev.AccountID = %q, want 585912155334", resolved.AccountID)
+	if resolved.AccountID != "111122223333" {
+		t.Errorf("dev.AccountID = %q, want 111122223333", resolved.AccountID)
 	}
 	if resolved.Cluster != "eks-dev" {
 		t.Errorf("dev.Cluster = %q, want eks-dev", resolved.Cluster)
@@ -345,25 +345,25 @@ func TestResolveTarget_ExplicitAccount(t *testing.T) {
 		Targets: map[string]TargetConfig{
 			"dev": {
 				Cluster:    "eks-dev",
-				AWSAccount: "585912155334",
+				AWSAccount: "111122223333",
 				Region:     "us-east-1",
 			},
 			"prod": {
 				Cluster:    "eks-prod",
-				AWSAccount: "593671994769",
+				AWSAccount: "444455556666",
 				Region:     "us-east-1",
 			},
 		},
 		AWS: AWSConfig{
 			Accounts: map[string]AWSAccountConfig{
-				"585912155334": {AwsProfile: "dev-sso"},
-				"593671994769": {AwsProfile: "prd-sso"},
+				"111122223333": {AwsProfile: "dev-sso"},
+				"444455556666": {AwsProfile: "prd-sso"},
 			},
 		},
 		Kubernetes: KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev":  "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
-				"eks-prod": "arn:aws:eks:us-east-1:593671994769:cluster/eks-prod",
+				"eks-dev":  "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
+				"eks-prod": "arn:aws:eks:us-east-1:444455556666:cluster/eks-prod",
 			},
 		},
 	}
@@ -375,8 +375,8 @@ func TestResolveTarget_ExplicitAccount(t *testing.T) {
 	if resolved.AwsProfile != "dev-sso" {
 		t.Errorf("dev.AwsProfile = %q, want dev-sso", resolved.AwsProfile)
 	}
-	if resolved.AccountID != "585912155334" {
-		t.Errorf("dev.AccountID = %q, want 585912155334", resolved.AccountID)
+	if resolved.AccountID != "111122223333" {
+		t.Errorf("dev.AccountID = %q, want 111122223333", resolved.AccountID)
 	}
 	if resolved.Region != "us-east-1" {
 		t.Errorf("dev.Region = %q, want us-east-1", resolved.Region)
@@ -392,8 +392,8 @@ func TestResolveTarget_ExplicitAccount(t *testing.T) {
 	if resolved.AwsProfile != "prd-sso" {
 		t.Errorf("prod.AwsProfile = %q, want prd-sso", resolved.AwsProfile)
 	}
-	if resolved.AccountID != "593671994769" {
-		t.Errorf("prod.AccountID = %q, want 593671994769", resolved.AccountID)
+	if resolved.AccountID != "444455556666" {
+		t.Errorf("prod.AccountID = %q, want 444455556666", resolved.AccountID)
 	}
 }
 
@@ -402,13 +402,13 @@ func TestResolveTarget_AccountOnly(t *testing.T) {
 	cfg := &Config{
 		Targets: map[string]TargetConfig{
 			"prd": {
-				AWSAccount: "593671994769",
+				AWSAccount: "444455556666",
 				Region:     "us-east-1",
 			},
 		},
 		AWS: AWSConfig{
 			Accounts: map[string]AWSAccountConfig{
-				"593671994769": {AwsProfile: "prd-sso"},
+				"444455556666": {AwsProfile: "prd-sso"},
 			},
 		},
 	}
@@ -423,8 +423,8 @@ func TestResolveTarget_AccountOnly(t *testing.T) {
 	if resolved.AwsProfile != "prd-sso" {
 		t.Errorf("prd.AwsProfile = %q, want prd-sso", resolved.AwsProfile)
 	}
-	if resolved.AccountID != "593671994769" {
-		t.Errorf("prd.AccountID = %q, want 593671994769", resolved.AccountID)
+	if resolved.AccountID != "444455556666" {
+		t.Errorf("prd.AccountID = %q, want 444455556666", resolved.AccountID)
 	}
 	if resolved.Region != "us-east-1" {
 		t.Errorf("prd.Region = %q, want us-east-1", resolved.Region)
@@ -450,8 +450,8 @@ func TestExtractAccountIDFromARN(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"arn:aws:eks:us-east-1:585912155334:cluster/eks-dev", "585912155334"},
-		{"arn:aws:eks:us-west-2:593671994769:cluster/eks-prd", "593671994769"},
+		{"arn:aws:eks:us-east-1:111122223333:cluster/eks-dev", "111122223333"},
+		{"arn:aws:eks:us-west-2:444455556666:cluster/eks-prd", "444455556666"},
 		{"kind-local", ""},
 		{"", ""},
 		{"arn:aws:eks:us-east-1:short:cluster/x", ""}, // account too short
@@ -469,12 +469,12 @@ func TestResolveAccountProfile(t *testing.T) {
 	cfg := &Config{
 		AWS: AWSConfig{
 			Accounts: map[string]AWSAccountConfig{
-				"585912155334": {AwsProfile: "dev-sso"},
+				"111122223333": {AwsProfile: "dev-sso"},
 			},
 		},
 	}
 
-	if got := cfg.ResolveAccountProfile("585912155334"); got != "dev-sso" {
+	if got := cfg.ResolveAccountProfile("111122223333"); got != "dev-sso" {
 		t.Errorf("got %q, want %q", got, "dev-sso")
 	}
 	if got := cfg.ResolveAccountProfile("999999999999"); got != "" {
@@ -486,7 +486,7 @@ func TestResolveClusterContext(t *testing.T) {
 	cfg := &Config{
 		Kubernetes: KubernetesConfig{
 			Contexts: map[string]string{
-				"eks-dev": "arn:aws:eks:us-east-1:585912155334:cluster/eks-dev",
+				"eks-dev": "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
 			},
 		},
 	}

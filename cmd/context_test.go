@@ -9,14 +9,14 @@ import (
 
 func TestMergeContextSources(t *testing.T) {
 	kestContexts := map[string]string{
-		"eks-dev":  "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev",
-		"eks-prod": "arn:aws:eks:us-east-1:222222222222:cluster/eks-prod",
+		"eks-dev":  "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
+		"eks-prod": "arn:aws:eks:us-east-1:444455556666:cluster/eks-prod",
 	}
 	kubeContexts := []kubeconfig.Context{
 		// Overlaps with eks-dev — should mark InKubeCfg, keep "eks-dev" display name.
-		{Name: "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev"},
+		{Name: "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev"},
 		// Only in kubeconfig — should use ShortName for display.
-		{Name: "arn:aws:eks:eu-west-1:333333333333:cluster/eks-eu"},
+		{Name: "arn:aws:eks:eu-west-1:777788889999:cluster/eks-eu"},
 		{Name: "kind-local"},
 	}
 
@@ -51,7 +51,7 @@ func TestMergeContextSources(t *testing.T) {
 	if euEntry.InGlobalCfg || !euEntry.InKubeCfg {
 		t.Errorf("eks-eu should be kube-only, got InGlobalCfg=%v InKubeCfg=%v", euEntry.InGlobalCfg, euEntry.InKubeCfg)
 	}
-	if euEntry.Context != "arn:aws:eks:eu-west-1:333333333333:cluster/eks-eu" {
+	if euEntry.Context != "arn:aws:eks:eu-west-1:777788889999:cluster/eks-eu" {
 		t.Errorf("eks-eu context = %q", euEntry.Context)
 	}
 
@@ -94,9 +94,9 @@ func TestMergeContextSourcesKubeconfigOnly(t *testing.T) {
 
 func TestMatchContexts(t *testing.T) {
 	entries := []ContextEntry{
-		{DisplayName: "eks-dev", Context: "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev"},
-		{DisplayName: "eks-prod", Context: "arn:aws:eks:us-east-1:222222222222:cluster/eks-prod"},
-		{DisplayName: "eks-staging", Context: "arn:aws:eks:us-east-1:333333333333:cluster/eks-staging"},
+		{DisplayName: "eks-dev", Context: "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev"},
+		{DisplayName: "eks-prod", Context: "arn:aws:eks:us-east-1:444455556666:cluster/eks-prod"},
+		{DisplayName: "eks-staging", Context: "arn:aws:eks:us-east-1:777788889999:cluster/eks-staging"},
 		{DisplayName: "kind-local", Context: "kind-local"},
 	}
 
@@ -107,7 +107,7 @@ func TestMatchContexts(t *testing.T) {
 	}{
 		{"empty query", "", nil},
 		{"exact display name", "eks-dev", []string{"eks-dev"}},
-		{"exact full context", "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev", []string{"eks-dev"}},
+		{"exact full context", "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev", []string{"eks-dev"}},
 		{"substring display name", "stag", []string{"eks-staging"}},
 		{"substring matches multiple", "eks", []string{"eks-dev", "eks-prod", "eks-staging"}},
 		{"case insensitive", "EKS-DEV", []string{"eks-dev"}},
@@ -135,17 +135,17 @@ func TestMatchContextsShortNameOfARN(t *testing.T) {
 	entries := []ContextEntry{
 		{
 			DisplayName: "eks-dev", // ShortName already; covers both paths
-			Context:     "arn:aws:eks:us-east-1:111111111111:cluster/eks-dev",
+			Context:     "arn:aws:eks:us-east-1:111122223333:cluster/eks-dev",
 		},
 		{
 			// Display falls back to context when no kest entry — simulate by
 			// using the ARN as display too.
-			DisplayName: "arn:aws:eks:us-east-1:222222222222:cluster/some-cluster",
-			Context:     "arn:aws:eks:us-east-1:222222222222:cluster/some-cluster",
+			DisplayName: "arn:aws:eks:us-east-1:444455556666:cluster/some-cluster",
+			Context:     "arn:aws:eks:us-east-1:444455556666:cluster/some-cluster",
 		},
 	}
 	got := matchContexts(entries, "some-cluster")
-	if len(got) != 1 || got[0].DisplayName != "arn:aws:eks:us-east-1:222222222222:cluster/some-cluster" {
+	if len(got) != 1 || got[0].DisplayName != "arn:aws:eks:us-east-1:444455556666:cluster/some-cluster" {
 		t.Errorf("expected ShortName-based match, got %+v", got)
 	}
 }

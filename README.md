@@ -39,16 +39,16 @@ This lives on your machine and maps AWS account IDs to profiles, and cluster nam
 ```yaml
 aws:
   accounts:
-    "123456712345":
+    "111122223333":
       aws_profile: dev-sso
-    "152637261526":
+    "444455556666":
       aws_profile: prd-sso
   auto_sso_login: true          # auto aws sso login on expired sessions
 
 kubernetes:
   contexts:
-    eks-dev: arn:aws:eks:us-east-1:123456712345:cluster/eks-dev
-    eks-prd: arn:aws:eks:us-east-1:152637261526:cluster/eks-prd
+    eks-dev: arn:aws:eks:us-east-1:111122223333:cluster/eks-dev
+    eks-prd: arn:aws:eks:us-east-1:444455556666:cluster/eks-prd
     kind-local: kind-local
 ```
 
@@ -102,11 +102,11 @@ terraform:
 targets:
   dev:
     cluster: eks-dev
-    aws_account: "585912155334"
+    aws_account: "111122223333"
     region: us-east-1
   prod:
     cluster: eks-prd
-    aws_account: "593671994769"
+    aws_account: "444455556666"
     region: us-east-1
   local:
     cluster: kind-local
@@ -196,7 +196,7 @@ kest config accounts    # list account ID mappings
 aws:
   # Map AWS account IDs to profile names from ~/.aws/config.
   accounts:
-    # "123456789012":
+    # "111122223333":
     #   aws_profile: my-profile
   # Automatically run `aws sso login` when a session is expired.
   # Skipped in CI. Default: false.
@@ -206,7 +206,7 @@ aws:
 kubernetes:
   # Map short cluster names to full kube context strings.
   contexts:
-    # eks-dev: arn:aws:eks:us-east-1:123456789012:cluster/eks-dev
+    # eks-dev: arn:aws:eks:us-east-1:111122223333:cluster/eks-dev
     # kind-local: kind-local
 
 # --- Terraform execution ---
@@ -269,17 +269,17 @@ terraform:
 targets:
   # dev:
   #   cluster: eks-dev
-  #   aws_account: "123456712345"
+  #   aws_account: "111122223333"
   #   region: us-east-1
   # prod:
   #   cluster: eks-prd
-  #   aws_account: "123456712345"
+  #   aws_account: "111122223333"
   #   region: us-east-1
 
 # --- Directories (swoop: top-level dir → AWS account ID) ---
 directories:
-  # prd: "123456712345"
-  # dev: "161273827162"
+  # prd: "111122223333"
+  # dev: "777788889999"
 ```
 
 ## How resolution works
