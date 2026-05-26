@@ -15,6 +15,14 @@ It's particularly useful if you're deploying the same app to multiple EKS cluste
 
 ## Install
 
+Quick install (linux-amd64, linux-arm64, darwin-arm64):
+
+```sh
+curl -fsSL https://github.com/dmallubhotla/kestrel/releases/latest/download/install.sh | bash
+```
+
+See [`scripts/install.sh`](scripts/install.sh) or run it with `--help` for options.
+
 Kest is built with Nix:
 
 ```sh
