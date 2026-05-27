@@ -429,22 +429,22 @@ func rotateBackups(path string) {
 
 	// Remove oldest if it exists.
 	oldest := fmt.Sprintf("%s.bak.%d", path, maxBackups)
-	os.Remove(oldest)
+	_ = os.Remove(oldest)
 
 	// Shift .bak.N → .bak.N+1
 	for i := maxBackups - 1; i >= 1; i-- {
 		src := fmt.Sprintf("%s.bak.%d", path, i)
 		dst := fmt.Sprintf("%s.bak.%d", path, i+1)
-		os.Rename(src, dst)
+		_ = os.Rename(src, dst)
 	}
 
 	// .bak → .bak.1
-	os.Rename(path+".bak", path+".bak.1")
+	_ = os.Rename(path+".bak", path+".bak.1")
 
 	// current → .bak
 	data, err := os.ReadFile(path)
 	if err == nil {
-		os.WriteFile(path+".bak", data, 0o644)
+		_ = os.WriteFile(path+".bak", data, 0o644)
 	}
 }
 

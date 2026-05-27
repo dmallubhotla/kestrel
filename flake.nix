@@ -108,6 +108,20 @@
       formatter = eachSystem (pkgs: treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.wrapper);
       checks = eachSystem (pkgs: {
         formatting = treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.check self;
+        # Lint as a check: override the kest derivation to swap go test for
+        # golangci-lint in checkPhase. Reuses the vendored module setup from
+        # goConfigHook so no network is needed inside the sandbox.
+        golangci-lint = pkgs.kest.overrideAttrs (old: {
+          pname = "kest-golangci-lint";
+          nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ [ pkgs.golangci-lint ];
+          doCheck = true;
+          checkPhase = ''
+            runHook preCheck
+            export GOLANGCI_LINT_CACHE=$TMPDIR/golangci-lint-cache
+            golangci-lint run --timeout 5m ./...
+            runHook postCheck
+          '';
+        });
       });
 
       devShells = eachSystem (pkgs: {

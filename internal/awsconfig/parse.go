@@ -50,7 +50,7 @@ func ReadProfiles() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return ParseProfiles(f)
 }
 
@@ -65,7 +65,7 @@ func ReadProfileDetails() ([]Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return ParseProfileDetails(f)
 }
 

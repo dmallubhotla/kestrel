@@ -121,5 +121,5 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&force, "force", false, "bypass all safety guards (CI-only, clean worktree, branch restrictions)")
 	rootCmd.PersistentFlags().StringVar(&globalConfigPath, "config", "", "override global config path (default: ~/.config/kest/config.yaml)")
 
-	rootCmd.RegisterFlagCompletionFunc("environment", completeTargetNames)
+	_ = rootCmd.RegisterFlagCompletionFunc("environment", completeTargetNames)
 }

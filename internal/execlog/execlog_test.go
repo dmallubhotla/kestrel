@@ -37,7 +37,9 @@ func TestLogWritesJSONEntry(t *testing.T) {
 		DurationMs: 300,
 	})
 
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	data, err := os.ReadFile(f.Name())
 	if err != nil {

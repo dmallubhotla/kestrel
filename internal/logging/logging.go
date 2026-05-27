@@ -7,8 +7,6 @@ import (
 	"github.com/dmallubhotla/kestrel/internal/profile"
 )
 
-var logFile *os.File
-
 // Init sets up file-based logging to $XDG_CACHE_HOME/kest/logs/kest.log.
 // Returns a cleanup function to close the log file.
 func Init() (func(), error) {
@@ -21,10 +19,9 @@ func Init() (func(), error) {
 	if err != nil {
 		return func() {}, err
 	}
-	logFile = f
 
 	handler := slog.NewJSONHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(handler))
 
-	return func() { f.Close() }, nil
+	return func() { _ = f.Close() }, nil
 }

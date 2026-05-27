@@ -227,7 +227,7 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tmpFile := filepath.Join(tmpDir, ".kestconfig")
 	if err := os.WriteFile(tmpFile, data, 0o644); err != nil {

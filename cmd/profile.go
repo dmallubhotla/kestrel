@@ -297,7 +297,7 @@ func (d targetItemDelegate) Render(w io.Writer, m list.Model, index int, item li
 	if index == m.Index() {
 		style = style.Bold(true).Foreground(lipgloss.Color("12"))
 	}
-	fmt.Fprint(w, style.Render(line))
+	_, _ = fmt.Fprint(w, style.Render(line))
 }
 
 type pickerModel struct {

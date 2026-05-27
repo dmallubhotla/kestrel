@@ -94,7 +94,9 @@ func TestDiscover_TFVersionReading(t *testing.T) {
 
 	root := filepath.Join(base, "dev", "vpc")
 	createTFRoot(t, root)
-	os.WriteFile(filepath.Join(root, ".terraform-version"), []byte("1.9.2\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, ".terraform-version"), []byte("1.9.2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	roots, err := Discover(base)
 	if err != nil {
@@ -124,7 +126,9 @@ func TestDiscover_InitDetection(t *testing.T) {
 	}
 
 	// Create .terraform dir.
-	os.MkdirAll(filepath.Join(root, ".terraform"), 0o755)
+	if err := os.MkdirAll(filepath.Join(root, ".terraform"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	roots, err = Discover(base)
 	if err != nil {
@@ -162,12 +166,16 @@ func TestDiscover_SkipsDirsWithoutBackend(t *testing.T) {
 
 	// A directory with .tf files but no backend block should not be a root.
 	noBackend := filepath.Join(base, "dev", "misc")
-	os.MkdirAll(noBackend, 0o755)
-	os.WriteFile(filepath.Join(noBackend, "main.tf"), []byte(`
+	if err := os.MkdirAll(noBackend, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(noBackend, "main.tf"), []byte(`
 provider "aws" {
   region = "us-east-1"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	createTFRoot(t, filepath.Join(base, "dev", "vpc"))
 

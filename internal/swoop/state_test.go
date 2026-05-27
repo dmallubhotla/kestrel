@@ -17,7 +17,9 @@ func TestState_RoundTrip(t *testing.T) {
 	defer func() { xdg.StateHome = origState }()
 
 	projectDir := filepath.Join(tmp, "myproject")
-	os.MkdirAll(projectDir, 0o755)
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Load (should be empty).
 	state, err := LoadState(projectDir)

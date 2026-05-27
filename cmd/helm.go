@@ -57,7 +57,7 @@ With a release name, queries helm for that release's status.`,
 			// Show configured releases
 			for _, name := range cfg.ReleaseNames() {
 				r := cfg.Helm.Releases[name]
-				fmt.Fprintf(os.Stdout, "%-20s %-30s target=%s\n", name, r.ReleaseName, r.Target)
+				_, _ = fmt.Fprintf(os.Stdout, "%-20s %-30s target=%s\n", name, r.ReleaseName, r.Target)
 			}
 			return nil
 		}

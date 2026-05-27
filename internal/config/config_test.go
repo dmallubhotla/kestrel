@@ -9,7 +9,7 @@ import (
 func TestLoadFile_YAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")
-	os.WriteFile(path, []byte(`
+	if err := os.WriteFile(path, []byte(`
 helm:
   chart: oci://ghcr.io/test/chart:1.0
   values_dir: misc/chart
@@ -50,7 +50,9 @@ kubernetes:
 directories:
   prd: "444455556666"
   dev: "111122223333"
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := loadFile(path)
 	if err != nil {
@@ -101,7 +103,7 @@ directories:
 func TestLoadFile_TargetWithAccountAndRegion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")
-	os.WriteFile(path, []byte(`
+	if err := os.WriteFile(path, []byte(`
 targets:
   dev:
     cluster: eks-dev
@@ -113,7 +115,9 @@ targets:
     region: us-east-1
   local:
     cluster: kind-local
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := loadFile(path)
 	if err != nil {
@@ -143,7 +147,7 @@ targets:
 func TestLoadFile_SwoopConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")
-	os.WriteFile(path, []byte(`
+	if err := os.WriteFile(path, []byte(`
 swoop:
   cd_mode: pushd
   editor: nvim
@@ -152,7 +156,9 @@ terraform:
   auto_install_tfenv: true
   write_version: true
   default_version: "1.9.2"
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := loadFile(path)
 	if err != nil {
@@ -604,7 +610,7 @@ func TestEffectiveDeployScripts(t *testing.T) {
 func TestLoadFile_HelmReleases(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.yaml")
-	os.WriteFile(path, []byte(`
+	if err := os.WriteFile(path, []byte(`
 helm:
   chart: oci://ghcr.io/test/chart:1.0
   values_dir: chart
@@ -628,7 +634,9 @@ helm:
       values:
         - local.yaml
       deploy_scripts: []
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := loadFile(path)
 	if err != nil {

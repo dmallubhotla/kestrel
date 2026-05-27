@@ -128,7 +128,7 @@ func extractBackendAuthFromFile(path string) BackendAuth {
 	if err != nil {
 		return BackendAuth{}
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	inBackend := false
@@ -224,7 +224,7 @@ func appendAccountIDsFromFile(path string, ids []string) []string {
 	if err != nil {
 		return ids
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -287,11 +287,11 @@ func ExtractRegion(dir string) string {
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			if m := regionRe.FindStringSubmatch(scanner.Text()); len(m) > 1 {
-				f.Close()
+				_ = f.Close()
 				return m[1]
 			}
 		}
-		f.Close()
+		_ = f.Close()
 	}
 	return ""
 }

@@ -326,7 +326,7 @@ func handleTFVersionCheck(root swoop.Root) error {
 	fmt.Fprintf(os.Stderr, "Install now? [y/N] ")
 
 	var answer string
-	fmt.Scanln(&answer)
+	_, _ = fmt.Scanln(&answer)
 	answer = strings.TrimSpace(strings.ToLower(answer))
 
 	if answer != "y" && answer != "yes" {
@@ -464,12 +464,12 @@ func printBatchSummary(action string, results []batchResult) {
 			detail = r.summary
 		}
 		if detail != "" {
-			fmt.Fprintf(w, "  %s\t%s\t%s\n", r.root.Path, status, detail)
+			_, _ = fmt.Fprintf(w, "  %s\t%s\t%s\n", r.root.Path, status, detail)
 		} else {
-			fmt.Fprintf(w, "  %s\t%s\n", r.root.Path, status)
+			_, _ = fmt.Fprintf(w, "  %s\t%s\n", r.root.Path, status)
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 func applyGuards() error {
@@ -495,7 +495,7 @@ func confirmFuzzyMatch(matches []swoop.Root, target string) bool {
 	fmt.Fprintf(os.Stderr, "\nProceed? [y/N] ")
 
 	var answer string
-	fmt.Scanln(&answer)
+	_, _ = fmt.Scanln(&answer)
 	answer = strings.TrimSpace(strings.ToLower(answer))
 	return answer == "y" || answer == "yes"
 }
@@ -549,7 +549,7 @@ func recordAction(baseDir, rootPath, action string, result *swoop.ExecResult) {
 		state.RecordApply(rootPath)
 	}
 
-	state.Save()
+	_ = state.Save()
 }
 
 var swoopEditCmd = &cobra.Command{
@@ -663,7 +663,7 @@ func init() {
 		c.Flags().StringVar(&swoopActionDir, "dir", "", "filter by top-level directory")
 
 		c.ValidArgsFunction = completeSwoopRoots
-		c.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
+		_ = c.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
 	}
 
 	swoopCmd.AddCommand(swoopInitCmd)

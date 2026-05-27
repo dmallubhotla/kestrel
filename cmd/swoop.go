@@ -210,7 +210,7 @@ func compareRecent(a, b swoop.Root, state *swoop.State) bool {
 
 func printRootTable(roots []swoop.Root, state *swoop.State) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "ROOT\tDIR\tAWS\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY\tMODIFIED")
+	_, _ = fmt.Fprintln(w, "ROOT\tDIR\tAWS\tTF VERSION\tINIT\tDIRTY\tLAST ACTIVITY\tMODIFIED")
 
 	for _, r := range roots {
 		init := "-"
@@ -240,9 +240,9 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 			modified = relativeTime(r.TFModified)
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Dir, aws, ver, init, dirty, activity, modified)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.Path, r.Dir, aws, ver, init, dirty, activity, modified)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Fprintf(os.Stderr, "\n%d root(s) found\n", len(roots))
 }
@@ -293,7 +293,7 @@ func runSwoopInteractive(cmd *cobra.Command, args []string) error {
 func init() {
 	swoopListCmd.Flags().StringVar(&swoopDir, "dir", "", "filter by top-level directory")
 	swoopListCmd.ValidArgsFunction = completeSwoopRoots
-	swoopListCmd.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
+	_ = swoopListCmd.RegisterFlagCompletionFunc("dir", completeSwoopDirs)
 
 	swoopCmd.AddCommand(swoopListCmd)
 	rootCmd.AddCommand(swoopCmd)

@@ -43,7 +43,7 @@ func Init() (func(), error) {
 	encoder = json.NewEncoder(f)
 	mu.Unlock()
 
-	return func() { f.Close() }, nil
+	return func() { _ = f.Close() }, nil
 }
 
 // Log writes a command execution entry to the log.
@@ -54,5 +54,5 @@ func Log(entry Entry) {
 	if encoder == nil {
 		return
 	}
-	encoder.Encode(entry)
+	_ = encoder.Encode(entry)
 }

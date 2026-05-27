@@ -122,7 +122,7 @@ func executeCIAction(action string, root swoop.Root, baseDir string) error {
 		case "apply":
 			state.RecordApply(root.Path)
 		}
-		state.Save()
+		_ = state.Save()
 	}
 
 	if err != nil {

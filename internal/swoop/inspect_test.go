@@ -36,8 +36,10 @@ func TestInspectDirs_AccountIDExtraction(t *testing.T) {
 	base := t.TempDir()
 
 	root := filepath.Join(base, "dev", "vpc")
-	os.MkdirAll(root, 0o755)
-	os.WriteFile(filepath.Join(root, "root.tf"), []byte(`
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket = "my-bucket"
@@ -49,7 +51,9 @@ provider "aws" {
   region              = "us-east-1"
   allowed_account_ids = ["111122223333"]
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	roots, err := Discover(base)
 	if err != nil {
@@ -71,8 +75,10 @@ func TestInspectDirs_HCLAccountID(t *testing.T) {
 
 	// Create a terragrunt.hcl at the account level with aws_account_id.
 	accountDir := filepath.Join(base, "prd")
-	os.MkdirAll(accountDir, 0o755)
-	os.WriteFile(filepath.Join(accountDir, "terragrunt.hcl"), []byte(`
+	if err := os.MkdirAll(accountDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(accountDir, "terragrunt.hcl"), []byte(`
 remote_state {
   backend = "s3"
   config = {
@@ -83,19 +89,25 @@ remote_state {
 inputs = {
   aws_account_id = "444455556666"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a terraform root nested under the account dir.
 	root := filepath.Join(accountDir, "us-east-1", "prod", "vpc")
-	os.MkdirAll(root, 0o755)
-	os.WriteFile(filepath.Join(root, "main.tf"), []byte(`
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket = "my-bucket"
     key    = "prod/vpc"
   }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	roots, err := Discover(base)
 	if err != nil {
@@ -121,19 +133,25 @@ func TestInspectDirs_HCLInRoot(t *testing.T) {
 
 	// Root dir has both a .tf backend and a .hcl with account_id.
 	root := filepath.Join(base, "dev", "vpc")
-	os.MkdirAll(root, 0o755)
-	os.WriteFile(filepath.Join(root, "main.tf"), []byte(`
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket = "my-bucket"
   }
 }
-`), 0o644)
-	os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte(`
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte(`
 inputs = {
   account_id = "111122223333"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	roots, err := Discover(base)
 	if err != nil {
@@ -151,7 +169,7 @@ inputs = {
 
 func TestExtractBackendAuth_AssumeRoleArn(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket      = "example-iac-tfstate"
@@ -165,7 +183,9 @@ provider "aws" {
   allowed_account_ids = ["111122223333"]
   assume_role { role_arn = "arn:aws:iam::111122223333:role/dev-deployer" }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	want := BackendAuth{AccountID: "444455556666"}
@@ -176,14 +196,16 @@ provider "aws" {
 
 func TestExtractBackendAuth_TopLevelRoleArn(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket   = "example-iac-tfstate"
     role_arn = "arn:aws:iam::777788889999:role/dr-deployer"
   }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	want := BackendAuth{AccountID: "777788889999"}
@@ -194,7 +216,7 @@ terraform {
 
 func TestExtractBackendAuth_ExplicitProfile(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket  = "example-iac-tfstate"
@@ -206,7 +228,9 @@ provider "aws" {
   region  = "us-east-1"
   profile = "example-dev"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	want := BackendAuth{Profile: "prod-tfstate"}
@@ -219,7 +243,7 @@ func TestExtractBackendAuth_IgnoresProviderBlock(t *testing.T) {
 	// role_arn / profile in the provider block must not be returned —
 	// only attributes inside `backend "s3"` count.
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket = "example-iac-tfstate"
@@ -232,7 +256,9 @@ provider "aws" {
   profile = "example-dev"
   assume_role { role_arn = "arn:aws:iam::111122223333:role/dev-deployer" }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	if got != (BackendAuth{}) {
@@ -242,11 +268,13 @@ provider "aws" {
 
 func TestExtractBackendAuth_NoBackend(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 provider "aws" {
   region = "us-east-1"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	if got != (BackendAuth{}) {
@@ -256,13 +284,15 @@ provider "aws" {
 
 func TestExtractBackendAuth_NonS3Backend(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "local" {
     path = "terraform.tfstate"
   }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	if got != (BackendAuth{}) {
@@ -273,7 +303,7 @@ terraform {
 func TestExtractBackendAuth_MultiLineAssumeRole(t *testing.T) {
 	// assume_role block spans multiple lines.
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "root.tf"), []byte(`
 terraform {
   backend "s3" {
     bucket = "example-iac-tfstate"
@@ -282,7 +312,9 @@ terraform {
     }
   }
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	got := ExtractBackendAuth(dir)
 	want := BackendAuth{AccountID: "444455556666"}
@@ -293,11 +325,13 @@ terraform {
 
 func TestExtractAccountIDs_NoMatch(t *testing.T) {
 	base := t.TempDir()
-	os.WriteFile(filepath.Join(base, "main.tf"), []byte(`
+	if err := os.WriteFile(filepath.Join(base, "main.tf"), []byte(`
 provider "aws" {
   region = "us-east-1"
 }
-`), 0o644)
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	ids := extractAccountIDs(base)
 	if len(ids) != 0 {

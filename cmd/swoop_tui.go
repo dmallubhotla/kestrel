@@ -183,7 +183,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 	if filterStr == "" {
 		filterStr = swoopFilterDim.Render("type to filter...")
 	}
-	b.WriteString(fmt.Sprintf("%s  %s\n\n", title, filterStr))
+	fmt.Fprintf(&b, "%s  %s\n\n", title, filterStr)
 
 	// Root list.
 	if len(m.filtered) == 0 {
@@ -321,9 +321,9 @@ func (m swoopTUIModel) viewActionPicker() string {
 
 	for i, action := range swoopActions {
 		if i == m.actionIdx {
-			b.WriteString(fmt.Sprintf("  %s ", swoopActionActive.Render(action)))
+			fmt.Fprintf(&b, "  %s ", swoopActionActive.Render(action))
 		} else {
-			b.WriteString(fmt.Sprintf("  %s ", swoopActionInactive.Render(action)))
+			fmt.Fprintf(&b, "  %s ", swoopActionInactive.Render(action))
 		}
 	}
 	b.WriteString("\n")
@@ -345,7 +345,7 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 	b.WriteString("\n")
 
 	writeField := func(key, val string) {
-		b.WriteString(fmt.Sprintf("  %s %s\n", swoopPreviewKey.Render(key+":"), val))
+		fmt.Fprintf(&b, "  %s %s\n", swoopPreviewKey.Render(key+":"), val)
 	}
 
 	writeField("dir", r.Dir)
