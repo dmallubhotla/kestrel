@@ -119,6 +119,119 @@ contexts:
 	}
 }
 
+func TestParseCurrentContext(t *testing.T) {
+	data := []byte(`
+apiVersion: v1
+kind: Config
+current-context: acme-dev
+contexts:
+- name: acme-dev
+  context:
+    cluster: acme-dev
+`)
+	cur, err := ParseCurrentContext(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur != "acme-dev" {
+		t.Errorf("ParseCurrentContext = %q, want acme-dev", cur)
+	}
+}
+
+func TestParseCurrentContextMissing(t *testing.T) {
+	data := []byte(`
+apiVersion: v1
+kind: Config
+contexts: []
+`)
+	cur, err := ParseCurrentContext(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur != "" {
+		t.Errorf("ParseCurrentContext = %q, want empty", cur)
+	}
+}
+
+func TestCurrentContextFirstFileWins(t *testing.T) {
+	dir := t.TempDir()
+
+	fileA := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(fileA, []byte(`
+apiVersion: v1
+kind: Config
+current-context: from-a
+contexts:
+- name: from-a
+  context:
+    cluster: a
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fileB := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(fileB, []byte(`
+apiVersion: v1
+kind: Config
+current-context: from-b
+contexts:
+- name: from-b
+  context:
+    cluster: b
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("KUBECONFIG", fileA+string(filepath.ListSeparator)+fileB)
+
+	cur, err := CurrentContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur != "from-a" {
+		t.Errorf("CurrentContext = %q, want from-a (first file with non-empty wins)", cur)
+	}
+}
+
+func TestCurrentContextSkipsEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	fileA := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(fileA, []byte(`
+apiVersion: v1
+kind: Config
+contexts:
+- name: only-a
+  context:
+    cluster: a
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fileB := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(fileB, []byte(`
+apiVersion: v1
+kind: Config
+current-context: from-b
+contexts:
+- name: from-b
+  context:
+    cluster: b
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("KUBECONFIG", fileA+string(filepath.ListSeparator)+fileB)
+
+	cur, err := CurrentContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cur != "from-b" {
+		t.Errorf("CurrentContext = %q, want from-b (first non-empty)", cur)
+	}
+}
+
 func TestReadContextsSkipsEmptyEntries(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "kc.yaml")

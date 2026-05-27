@@ -18,7 +18,8 @@ type Context struct {
 
 // kubeConfig is the subset of ~/.kube/config we care about.
 type kubeConfig struct {
-	Contexts []contextEntry `yaml:"contexts"`
+	CurrentContext string         `yaml:"current-context"`
+	Contexts       []contextEntry `yaml:"contexts"`
 }
 
 type contextEntry struct {
@@ -75,6 +76,36 @@ func ParseContexts(data []byte) ([]Context, error) {
 		})
 	}
 	return contexts, nil
+}
+
+// ParseCurrentContext returns the current-context value from kubeconfig YAML
+// bytes, or "" if unset.
+func ParseCurrentContext(data []byte) (string, error) {
+	var kc kubeConfig
+	if err := yaml.Unmarshal(data, &kc); err != nil {
+		return "", fmt.Errorf("parsing kubeconfig: %w", err)
+	}
+	return kc.CurrentContext, nil
+}
+
+// CurrentContext returns the active kubectl context from kubeconfig file(s).
+// When KUBECONFIG lists multiple files, the first non-empty current-context
+// wins (matching kubectl). Returns "" if no file sets one.
+func CurrentContext() (string, error) {
+	for _, path := range kubeConfigPaths() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", path, err)
+		}
+		cur, err := ParseCurrentContext(data)
+		if err != nil {
+			return "", fmt.Errorf("parsing %s: %w", path, err)
+		}
+		if cur != "" {
+			return cur, nil
+		}
+	}
+	return "", nil
 }
 
 // ShortName extracts a human-friendly name from a kube context name.

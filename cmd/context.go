@@ -152,13 +152,21 @@ var contextListCmd = &cobra.Command{
 			fmt.Println("(no contexts)")
 			return nil
 		}
+		current, err := kubeconfig.CurrentContext()
+		if err != nil {
+			slog.Debug("could not read current kube context", "err", err)
+		}
 		for _, e := range entries {
+			marker := "  "
+			if e.Context == current {
+				marker = "* "
+			}
 			src := sourceLabel(e)
 			short := kubeconfig.ShortName(e.Context)
 			if short == e.DisplayName {
-				fmt.Printf("  %-30s [%s]\n", e.DisplayName, src)
+				fmt.Printf("%s%-30s [%s]\n", marker, e.DisplayName, src)
 			} else {
-				fmt.Printf("  %-30s [%s]  (context: %s)\n", e.DisplayName, src, short)
+				fmt.Printf("%s%-30s [%s]  (context: %s)\n", marker, e.DisplayName, src, short)
 			}
 		}
 		return nil
