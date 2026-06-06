@@ -345,7 +345,9 @@ func (c *Config) TerraformCommand() string {
 //   - "tfenv" / "tofuenv" / other: the CLI to invoke
 //
 // Resolution order: $KEST_TERRAFORM_VERSION_MANAGER → cfg.Terraform.VersionManager
-// → auto-detect ("tofuenv" if Command is "tofu", else "tfenv").
+// → auto-detect ("tofuenv" if the resolved terraform command is "tofu",
+// else "tfenv"). Auto-detect respects $KEST_TERRAFORM_COMMAND so an env
+// override of the command also flips the manager default.
 // Safe to call on a nil receiver.
 func (c *Config) TerraformVersionManager() string {
 	if env := os.Getenv("KEST_TERRAFORM_VERSION_MANAGER"); env != "" {
@@ -354,7 +356,7 @@ func (c *Config) TerraformVersionManager() string {
 	if c != nil && c.Terraform.VersionManager != "" {
 		return c.Terraform.VersionManager
 	}
-	if c != nil && c.Terraform.Command == "tofu" {
+	if c.TerraformCommand() == "tofu" {
 		return "tofuenv"
 	}
 	return "tfenv"

@@ -726,6 +726,18 @@ func TestTerraformVersionManager(t *testing.T) {
 		t.Errorf("tofu auto-detect: got %q, want tofuenv", got)
 	}
 
+	// $KEST_TERRAFORM_COMMAND=tofu must also flip the auto-detect even
+	// when config has no command set (and even on a nil receiver).
+	t.Setenv("KEST_TERRAFORM_COMMAND", "tofu")
+	if got := (&Config{}).TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("env-driven tofu auto-detect: got %q, want tofuenv", got)
+	}
+	var nilCfg *Config
+	if got := nilCfg.TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("env-driven tofu auto-detect (nil receiver): got %q, want tofuenv", got)
+	}
+	t.Setenv("KEST_TERRAFORM_COMMAND", "")
+
 	// Explicit config value wins over auto-detect.
 	c.Terraform.VersionManager = "tfenv"
 	if got := c.TerraformVersionManager(); got != "tfenv" {
@@ -746,7 +758,6 @@ func TestTerraformVersionManager(t *testing.T) {
 
 	// Nil receiver is safe.
 	t.Setenv("KEST_TERRAFORM_VERSION_MANAGER", "")
-	var nilCfg *Config
 	if got := nilCfg.TerraformVersionManager(); got != "tfenv" {
 		t.Errorf("nil receiver: got %q, want tfenv", got)
 	}
