@@ -64,8 +64,10 @@ You can also set behavioral preferences:
 
 ```yaml
 terraform:
-  auto_install_tfenv: true      # auto tfenv install on version mismatch (no prompt)
-  write_version: true           # write .terraform-version if missing
+  command: tofu                 # CLI to invoke (default "terraform")
+  version_manager: tofuenv      # "tfenv", "tofuenv", or "off" to disable
+  auto_install_pinned: true     # auto-install pinned version on mismatch (no prompt)
+  write_version: true           # write version-pin file if missing
   default_version: "1.9.2"     # version to pin (omit to detect from active terraform)
 
 swoop:
@@ -219,10 +221,20 @@ kubernetes:
 
 # --- Terraform execution ---
 terraform:
-  # Automatically run `tfenv install` when the active terraform version
-  # doesn't match .terraform-version. Skipped in CI. Default: false.
-  auto_install_tfenv: false
-  # Write a .terraform-version file into roots that lack one before
+  # Terraform-compatible CLI to invoke. Set to "tofu" to use OpenTofu.
+  # Overridden at runtime by $KEST_TERRAFORM_COMMAND. Default: "terraform".
+  command: ""
+  # Version-manager CLI kest uses for version-pin handling.
+  # "tfenv", "tofuenv", or "off" to disable kest's version-manager
+  # integration. Empty auto-detects: "tofuenv" when command is "tofu",
+  # else "tfenv". Overridden by $KEST_TERRAFORM_VERSION_MANAGER.
+  version_manager: ""
+  # Automatically install the pinned terraform version (from the
+  # version-pin file) via the configured version_manager on mismatch.
+  # No-op when version_manager is "off". Skipped in CI. Default: false.
+  auto_install_pinned: false
+  # Write a version-pin file (.opentofu-version when version_manager is
+  # tofuenv, else .terraform-version) into roots that lack one before
   # running init/plan/apply. Default: false.
   write_version: false
   # Version to write when write_version is enabled. If empty, the
@@ -270,6 +282,13 @@ terraform:
   # Path to IaC directory (swoop discovery base for centralised IaC repos).
   # Default: "" (project root).
   iac_dir: ""
+  # command can also be set here to pin the CLI per-project (e.g. "tofu").
+  # Project overrides global. $KEST_TERRAFORM_COMMAND overrides both. Default: "".
+  command: ""
+  # version_manager can also be set here to pin the manager per-project.
+  # Project overrides global. $KEST_TERRAFORM_VERSION_MANAGER overrides both.
+  # Default: "".
+  version_manager: ""
   # default_version can also be set here to pin per-project. Default: "".
   default_version: ""
 

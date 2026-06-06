@@ -83,6 +83,18 @@ type HelmRelease struct {
 type TerraformConfig struct {
 	IACDir string `yaml:"iac_dir,omitempty"`
 
+	// Command is the terraform-compatible CLI to invoke (e.g. "terraform"
+	// or "tofu"). Empty defaults to "terraform". Overridden at runtime by
+	// the $KEST_TERRAFORM_COMMAND environment variable.
+	Command string `yaml:"command,omitempty"`
+
+	// VersionManager is the version-manager CLI kest uses for
+	// .terraform-version handling: "tfenv", "tofuenv", or "off" to disable
+	// kest's version-manager integration entirely. Empty auto-detects:
+	// "tofuenv" when Command is "tofu", else "tfenv". Overridden by
+	// $KEST_TERRAFORM_VERSION_MANAGER.
+	VersionManager string `yaml:"version_manager,omitempty"`
+
 	// WriteVersion writes a .terraform-version file into roots that lack
 	// one, pinning DefaultVersion or the currently active terraform version.
 	WriteVersion bool `yaml:"write_version,omitempty"`
@@ -92,9 +104,10 @@ type TerraformConfig struct {
 	// version is detected and used instead.
 	DefaultVersion string `yaml:"default_version,omitempty"`
 
-	// AutoInstallTfenv automatically runs tfenv install when a version
-	// mismatch is detected, without prompting. Skipped in CI.
-	AutoInstallTfenv bool `yaml:"auto_install_tfenv,omitempty"`
+	// AutoInstallPinned automatically installs the pinned terraform
+	// version (from .terraform-version) via the configured VersionManager
+	// when a mismatch is detected, without prompting. Skipped in CI.
+	AutoInstallPinned bool `yaml:"auto_install_pinned,omitempty"`
 }
 
 // SwoopConfig holds user preferences for the swoop subsystem.
@@ -248,6 +261,12 @@ func compose(user, project *Config) *Config {
 	if project.Terraform.IACDir != "" {
 		out.Terraform.IACDir = project.Terraform.IACDir
 	}
+	if project.Terraform.Command != "" {
+		out.Terraform.Command = project.Terraform.Command
+	}
+	if project.Terraform.VersionManager != "" {
+		out.Terraform.VersionManager = project.Terraform.VersionManager
+	}
 	if project.Terraform.DefaultVersion != "" {
 		out.Terraform.DefaultVersion = project.Terraform.DefaultVersion
 	}
@@ -305,6 +324,40 @@ func (c *Config) ResolveTarget(name string) (ResolvedTarget, error) {
 	}
 
 	return resolved, nil
+}
+
+// TerraformCommand returns the terraform-compatible CLI to invoke.
+// Resolution order: $KEST_TERRAFORM_COMMAND → cfg.Terraform.Command → "terraform".
+// Safe to call on a nil receiver.
+func (c *Config) TerraformCommand() string {
+	if env := os.Getenv("KEST_TERRAFORM_COMMAND"); env != "" {
+		return env
+	}
+	if c != nil && c.Terraform.Command != "" {
+		return c.Terraform.Command
+	}
+	return "terraform"
+}
+
+// TerraformVersionManager returns the version-manager CLI kest uses for
+// .terraform-version handling. Possible return values:
+//   - "off": user explicitly disabled version-manager integration
+//   - "tfenv" / "tofuenv" / other: the CLI to invoke
+//
+// Resolution order: $KEST_TERRAFORM_VERSION_MANAGER → cfg.Terraform.VersionManager
+// → auto-detect ("tofuenv" if Command is "tofu", else "tfenv").
+// Safe to call on a nil receiver.
+func (c *Config) TerraformVersionManager() string {
+	if env := os.Getenv("KEST_TERRAFORM_VERSION_MANAGER"); env != "" {
+		return env
+	}
+	if c != nil && c.Terraform.VersionManager != "" {
+		return c.Terraform.VersionManager
+	}
+	if c != nil && c.Terraform.Command == "tofu" {
+		return "tofuenv"
+	}
+	return "tfenv"
 }
 
 // ResolveAccountProfile resolves an account ID to an AWS profile name.

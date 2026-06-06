@@ -23,5 +23,5 @@ func Run(cfg *config.Config, targetName string, resolved config.ResolvedTarget, 
 	}
 
 	fmt.Fprintf(os.Stderr, "debug: using %s...\n", dir)
-	return runner.RunInDirWithEnv(dir, extraEnv, "terraform", tfArgs...)
+	return runner.RunInDirWithEnv(dir, extraEnv, cfg.TerraformCommand(), tfArgs...)
 }

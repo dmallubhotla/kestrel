@@ -106,13 +106,15 @@ func extractDir(relPath string) string {
 	return parts[0]
 }
 
-// readTFVersion reads the .terraform-version file in dir if it exists.
+// readTFVersion reads the version-pin file in dir. Prefers .opentofu-version
+// when both exist (the OpenTofu-native convention is the more specific signal).
 func readTFVersion(dir string) string {
-	data, err := os.ReadFile(filepath.Join(dir, ".terraform-version"))
-	if err != nil {
-		return ""
+	for _, name := range []string{".opentofu-version", ".terraform-version"} {
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			return strings.TrimSpace(string(data))
+		}
 	}
-	return strings.TrimSpace(string(data))
+	return ""
 }
 
 // isInitialized returns true if the directory contains a .terraform subdirectory.

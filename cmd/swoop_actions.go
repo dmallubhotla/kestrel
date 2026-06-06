@@ -230,20 +230,23 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 		awsProfile = backendProfile
 	}
 
-	// Write .terraform-version if missing and configured.
+	tfCommand := cfg.TerraformCommand()
+	tfManager := cfg.TerraformVersionManager()
+
+	// Write the version-pin file if missing and configured.
 	if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
-		if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+		if file, v, err := swoop.EnsureTFVersion(tfCommand, tfManager, root, cfg.Terraform.DefaultVersion); err != nil {
 			slog.Warn("ensure terraform version", "root", root.Path, "err", err)
 			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 		} else if v != "" {
 			root.TFVersion = v
-			slog.Info("wrote .terraform-version", "root", root.Path, "version", v)
-			fmt.Fprintf(os.Stderr, "wrote .terraform-version: %s\n", v)
+			slog.Info("wrote version pin", "root", root.Path, "file", file, "version", v)
+			fmt.Fprintf(os.Stderr, "wrote %s: %s\n", file, v)
 		}
 	}
 
-	// tfenv preflight check.
-	if err := handleTFVersionCheck(root); err != nil {
+	// Version-manager preflight check.
+	if err := handleTFVersionCheck(tfCommand, tfManager, root); err != nil {
 		return err
 	}
 
@@ -267,7 +270,7 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 	fmt.Fprintln(os.Stderr)
 
 	// Execute.
-	result, err := swoop.RunTerraform(root, awsProfile, action)
+	result, err := swoop.RunTerraform(tfCommand, root, awsProfile, action)
 
 	// Record to local state regardless of error.
 	recordAction(baseDir, root.Path, action, result)
@@ -286,9 +289,9 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 }
 
 // handleTFVersionCheck checks the terraform version and offers to install via
-// tfenv if there's a mismatch.
-func handleTFVersionCheck(root swoop.Root) error {
-	check := swoop.CheckTFVersion(root)
+// the configured version manager if there's a mismatch.
+func handleTFVersionCheck(binary, manager string, root swoop.Root) error {
+	check := swoop.CheckTFVersion(binary, manager, root)
 	if check.OK {
 		return nil
 	}
@@ -298,30 +301,35 @@ func handleTFVersionCheck(root swoop.Root) error {
 		"required", check.Required,
 		"installed", check.Installed,
 	)
+	pinFile := swoop.VersionFileFor(manager)
 	if check.Installed != "" {
-		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from .terraform-version) but %s is active\n",
-			check.Required, check.Installed)
+		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from %s) but %s is active\n",
+			check.Required, pinFile, check.Installed)
 	} else {
-		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from .terraform-version)\n",
-			check.Required)
+		fmt.Fprintf(os.Stderr, "warning: root requires terraform %s (from %s)\n",
+			check.Required, pinFile)
 	}
 
-	if !check.TfenvAvailable {
-		fmt.Fprintf(os.Stderr, "  Install manually or use tfenv: tfenv install %s\n", check.Required)
+	if !check.VersionManagerAvailable {
+		if manager == "off" {
+			fmt.Fprintf(os.Stderr, "  version_manager is off — install manually.\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "  Install manually or via %s: %s install %s\n", manager, manager, check.Required)
+		}
 		return nil // warn but don't block
 	}
 
-	// Auto-install if configured (skip in CI where tfenv use is implicit).
-	if cfg != nil && cfg.Terraform.AutoInstallTfenv && !guard.IsCI() {
-		fmt.Fprintf(os.Stderr, "  auto-installing terraform %s via tfenv...\n\n", check.Required)
-		if err := swoop.InstallTFVersion(check.Required); err != nil {
-			return fmt.Errorf("tfenv install failed: %w", err)
+	// Auto-install if configured (skip in CI where manager use is implicit).
+	if cfg != nil && cfg.Terraform.AutoInstallPinned && !guard.IsCI() {
+		fmt.Fprintf(os.Stderr, "  auto-installing terraform %s via %s...\n\n", check.Required, manager)
+		if err := swoop.InstallTFVersion(manager, check.Required); err != nil {
+			return fmt.Errorf("%s install failed: %w", manager, err)
 		}
 		fmt.Fprintln(os.Stderr)
 		return nil
 	}
 
-	installCmd := swoop.FormatTFVersionCommand(check.Required)
+	installCmd := swoop.FormatTFVersionCommand(manager, check.Required)
 	fmt.Fprintf(os.Stderr, "\n  %s\n\n", installCmd)
 	fmt.Fprintf(os.Stderr, "Install now? [y/N] ")
 
@@ -335,8 +343,8 @@ func handleTFVersionCheck(root swoop.Root) error {
 	}
 
 	fmt.Fprintln(os.Stderr)
-	if err := swoop.InstallTFVersion(check.Required); err != nil {
-		return fmt.Errorf("tfenv install failed: %w", err)
+	if err := swoop.InstallTFVersion(manager, check.Required); err != nil {
+		return fmt.Errorf("%s install failed: %w", manager, err)
 	}
 	fmt.Fprintln(os.Stderr)
 	return nil
@@ -379,6 +387,8 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		}
 	}
 
+	tfCommand := cfg.TerraformCommand()
+	tfManager := cfg.TerraformVersionManager()
 	results := make([]batchResult, len(roots))
 
 	for i, root := range roots {
@@ -392,19 +402,19 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)
 
-		// Write .terraform-version if missing and configured.
+		// Write the version-pin file if missing and configured.
 		if cfg != nil && cfg.Terraform.WriteVersion && root.TFVersion == "" {
-			if v, err := swoop.EnsureTFVersion(root, cfg.Terraform.DefaultVersion); err != nil {
+			if file, v, err := swoop.EnsureTFVersion(tfCommand, tfManager, root, cfg.Terraform.DefaultVersion); err != nil {
 				slog.Warn("ensure terraform version", "root", root.Path, "err", err)
 				fmt.Fprintf(os.Stderr, "  warning: %v\n", err)
 			} else if v != "" {
 				root.TFVersion = v
-				slog.Info("wrote .terraform-version", "root", root.Path, "version", v)
-				fmt.Fprintf(os.Stderr, "  wrote .terraform-version: %s\n", v)
+				slog.Info("wrote version pin", "root", root.Path, "file", file, "version", v)
+				fmt.Fprintf(os.Stderr, "  wrote %s: %s\n", file, v)
 			}
 		}
 
-		check := swoop.CheckTFVersion(root)
+		check := swoop.CheckTFVersion(tfCommand, tfManager, root)
 		if !check.OK {
 			slog.Warn("terraform version mismatch",
 				"root", root.Path,
@@ -419,7 +429,7 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 			"root", root.Path,
 			"aws_profile", awsProfile,
 		)
-		execResult, err := swoop.RunTerraform(root, awsProfile, action)
+		execResult, err := swoop.RunTerraform(tfCommand, root, awsProfile, action)
 		recordAction(baseDir, root.Path, action, execResult)
 
 		br := batchResult{root: root, err: err}

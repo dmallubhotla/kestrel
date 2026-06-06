@@ -18,7 +18,8 @@ type Root struct {
 	// Set by EnrichWithAccountIDs after discovery + inspection.
 	AccountID string
 
-	// TFVersion is the terraform version from .terraform-version, if present.
+	// TFVersion is the version from the version-pin file
+	// (.opentofu-version or .terraform-version) in the root, if present.
 	TFVersion string
 
 	// Initialized is true when a .terraform/ directory exists in the root.
