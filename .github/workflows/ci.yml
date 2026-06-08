@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      code-quality: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
@@ -56,6 +57,17 @@ jobs:
             kestci-${{ matrix.target }}
             checksums-${{ matrix.target }}.txt
           retention-days: 7
+      - name: Extract coverage report
+        if: matrix.target == 'linux-amd64'
+        run: |
+          nix build --print-build-logs .#checks.x86_64-linux.coverage -o result-coverage
+          cp result-coverage/coverage.xml coverage.xml
+      - uses: actions/upload-code-coverage@abb5995db9e0199b0e2bb9dbd136fce4cb1ec4d3 # v1.3.0
+        if: matrix.target == 'linux-amd64'
+        with:
+          file: coverage.xml
+          language: Go
+          label: code-coverage/go-test
   publish:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')

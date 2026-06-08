@@ -122,6 +122,28 @@
             runHook postCheck
           '';
         });
+        # Run the full test suite with coverage. $out contains coverage.out
+        # (Go's native profile) and coverage.xml (Cobertura) so CI can extract
+        # and upload to GitHub Code Quality.
+        coverage = pkgs.kest.overrideAttrs (old: {
+          pname = "kest-coverage";
+          nativeCheckInputs = (old.nativeCheckInputs or [ ]) ++ [ pkgs.gocover-cobertura ];
+          doCheck = true;
+          checkPhase = ''
+            runHook preCheck
+            go test -coverprofile=coverage.out -covermode=atomic ./...
+            gocover-cobertura < coverage.out > coverage.xml
+            runHook postCheck
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out
+            cp coverage.out coverage.xml $out/
+            runHook postInstall
+          '';
+          postInstall = "";
+          doInstallCheck = false;
+        });
       });
 
       devShells = eachSystem (pkgs: {
@@ -131,6 +153,7 @@
             gotools
             golangci-lint
             go-tools
+            gocover-cobertura
             gopls
             gomod2nix.packages.${pkgs.stdenv.hostPlatform.system}.default
             hanko.packages.${pkgs.stdenv.hostPlatform.system}.default
