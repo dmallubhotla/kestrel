@@ -199,12 +199,140 @@ kest config accounts    # list account ID mappings
 
 ## Full config reference
 
-Kest is opinionated: every field has a default. The blocks below show every
-field with its default value plus realistic example entries for maps that
-are inherently user-specific (AWS accounts, kube contexts, helm releases,
-targets, directories). A repo or machine with no config file is treated as
-if it had the scalar defaults below — the example map entries are
-illustrative, not implicit.
+The blocks below show every field with its default value;
+A repo or machine with no config file is treated as if it had exactly the defaults below.
+
+
+### Global config (`~/.config/kest/config.yaml`) — all fields with defaults
+
+```yaml
+# --- AWS ---
+aws:
+  # Map AWS account IDs to profile names from ~/.aws/config. Example:
+  #   accounts:
+  #     "111122223333":
+  #       aws_profile: dev-sso
+  #     "444455556666":
+  #       aws_profile: prd-sso
+  accounts: {}
+  # Automatically run `aws sso login` when a session is expired.
+  # Skipped in CI.
+  auto_sso_login: false
+
+# --- Kubernetes ---
+kubernetes:
+  # Map short cluster names to full kube context strings (typically EKS ARNs).
+  # Example:
+  #   contexts:
+  #     eks-dev: arn:aws:eks:us-east-1:111122223333:cluster/eks-dev
+  #     kind-local: kind-local
+  contexts: {}
+
+# --- Terraform execution ---
+terraform:
+  # Terraform-compatible CLI to invoke. Set to "tofu" to use OpenTofu.
+  # Overridden at runtime by $KEST_TERRAFORM_COMMAND.
+  command: "terraform"
+  # Version-manager CLI kest uses for version-pin handling.
+  # "tfenv", "tofuenv", or "off". Empty auto-detects: "tofuenv" when the
+  # resolved command is "tofu", else "tfenv". Overridden by
+  # $KEST_TERRAFORM_VERSION_MANAGER. See "Terraform vs OpenTofu" above.
+  version_manager: ""
+  # Automatically install the pinned terraform version (from the
+  # version-pin file) via the configured version_manager on mismatch,
+  # without prompting. No-op when version_manager is "off". Skipped in CI.
+  auto_install_pinned: false
+  # Write a version-pin file (.opentofu-version when version_manager is
+  # tofuenv, else .terraform-version) into roots that lack one before
+  # running init/plan/apply.
+  write_version: false
+  # Version to write when write_version is enabled. Empty means detect the
+  # currently active terraform version at write time.
+  default_version: ""
+
+# --- Swoop (interactive terraform root browser) ---
+swoop:
+  # Shell command emitted by `swoop cd`: "cd" or "pushd".
+  cd_mode: cd
+  # Editor for `swoop edit`. Empty means use $EDITOR.
+  editor: ""
+  # Root ordering in the TUI: "git" (dirty-first + recency), "recent",
+  # or "alpha".
+  sort_order: git
+```
+
+### Project config (`.kestconfig`) — all fields with defaults
+
+```yaml
+# --- Helm ---
+helm:
+  # OCI chart reference. Required for helm deploys.
+  # Example: oci://ghcr.io/myorg/mychart:1.0
+  chart: ""
+  # Directory containing values files. shared.yaml in this dir is
+  # auto-included if it exists; all other values are listed per release.
+  # Example: misc/chart
+  values_dir: ""
+  # Kubernetes namespace.
+  namespace: app
+  # Scripts to run before each helm deploy (paths relative to project root).
+  # Can be overridden per release (set deploy_scripts: [] on a release to skip).
+  # Example:
+  #   deploy_scripts:
+  #     - misc/chart/deploy-scripts/migrate.sh
+  deploy_scripts: []
+  # Named helm releases. Each release targets exactly one entry in
+  # `targets:` below. Example:
+  #   releases:
+  #     other:
+  #       release_name: my-app-other   # passed to `helm upgrade`
+  #       target: dev                  # must match a key in targets:
+  #       values:                      # values files (relative to values_dir)
+  #         - dev.yaml
+  #         - dev-other.yaml
+  #     v1:
+  #       release_name: my-app-v1
+  #       target: local
+  #       values: [local.yaml]
+  #       deploy_scripts: []           # override top-level scripts; [] = skip
+  releases: {}
+
+# --- Terraform ---
+terraform:
+  # Path to IaC directory (swoop discovery base for centralised IaC repos).
+  # Empty means the project root. Example: misc/iac
+  iac_dir: ""
+  # command can also be set here to pin the CLI per-project (e.g. "tofu").
+  # Project overrides global. $KEST_TERRAFORM_COMMAND overrides both.
+  command: ""
+  # version_manager can also be set here to pin the manager per-project.
+  # Project overrides global. $KEST_TERRAFORM_VERSION_MANAGER overrides both.
+  version_manager: ""
+  # default_version can also be set here to pin a project-wide terraform
+  # version for write_version.
+  default_version: ""
+
+# --- Targets ---
+# Named deployment targets binding a cluster + AWS account + region. Helm
+# releases reference these by key; swoop also resolves through them. Example:
+#   targets:
+#     dev:
+#       cluster: eks-dev             # must resolve via kubernetes.contexts
+#       aws_account: "111122223333"  # must resolve via aws.accounts
+#       region: us-east-1
+#     local:
+#       cluster: kind-local          # cluster-only targets are valid (no AWS)
+targets: {}
+
+# --- Directories (swoop only) ---
+# For centralised-IaC repos: map a top-level directory name to an AWS
+# account ID, so swoop can resolve credentials by path even when a root
+# has no provider/account in its .tf files. Example:
+#   directories:
+#     prd: "444455556666"
+#     dev: "111122223333"
+directories: {}
+```
 
 ### Terraform vs OpenTofu
 
@@ -228,140 +356,6 @@ reads — `.opentofu-version` for tofuenv, `.terraform-version` otherwise.
 Discovery reads either file (`.opentofu-version` wins when both exist), so
 a repo migrating between the two still recognises its pin during the
 transition.
-
-### Global config (`~/.config/kest/config.yaml`) — all fields with defaults
-
-```yaml
-# --- AWS ---
-aws:
-  # Map AWS account IDs to profile names from ~/.aws/config.
-  # Inherently user-specific — the entries below are examples.
-  accounts:
-    "111122223333":
-      aws_profile: dev-sso
-    "444455556666":
-      aws_profile: prd-sso
-  # Automatically run `aws sso login` when a session is expired.
-  # Skipped in CI. Default: false.
-  auto_sso_login: false
-
-# --- Kubernetes ---
-kubernetes:
-  # Map short cluster names to full kube context strings (typically EKS ARNs).
-  # Inherently user-specific — the entries below are examples.
-  contexts:
-    eks-dev: arn:aws:eks:us-east-1:111122223333:cluster/eks-dev
-    eks-prd: arn:aws:eks:us-east-1:444455556666:cluster/eks-prd
-    kind-local: kind-local
-
-# --- Terraform execution ---
-terraform:
-  # Terraform-compatible CLI to invoke. Set to "tofu" to use OpenTofu.
-  # Overridden at runtime by $KEST_TERRAFORM_COMMAND. Default: "terraform".
-  command: "terraform"
-  # Version-manager CLI kest uses for version-pin handling.
-  # "tfenv", "tofuenv", or "off". Empty auto-detects: "tofuenv" when the
-  # resolved command is "tofu", else "tfenv". Overridden by
-  # $KEST_TERRAFORM_VERSION_MANAGER. See "Terraform vs OpenTofu" above.
-  version_manager: ""
-  # Automatically install the pinned terraform version (from the
-  # version-pin file) via the configured version_manager on mismatch,
-  # without prompting. No-op when version_manager is "off". Skipped in CI.
-  # Default: false.
-  auto_install_pinned: false
-  # Write a version-pin file (.opentofu-version when version_manager is
-  # tofuenv, else .terraform-version) into roots that lack one before
-  # running init/plan/apply. Default: false.
-  write_version: false
-  # Version to write when write_version is enabled. If empty, the
-  # currently active terraform version is detected. Default: "" (detect).
-  default_version: ""
-
-# --- Swoop (interactive terraform root browser) ---
-swoop:
-  # Shell command emitted by `swoop cd`: "cd" or "pushd". Default: "cd".
-  cd_mode: cd
-  # Editor for `swoop edit`. Empty means use $EDITOR. Default: "".
-  editor: ""
-  # Root ordering in the TUI: "git" (dirty-first + recency), "recent",
-  # or "alpha". Default: "git".
-  sort_order: git
-```
-
-### Project config (`.kestconfig`) — all fields with defaults
-
-```yaml
-# --- Helm ---
-helm:
-  # OCI chart reference. Required for helm deploys; defaults to "".
-  chart: oci://ghcr.io/myorg/mychart:1.0
-  # Directory containing values files. shared.yaml in this dir is
-  # auto-included if it exists; all other values are listed per release.
-  values_dir: misc/chart
-  # Kubernetes namespace. Default: "app".
-  namespace: app
-  # Scripts to run before each helm deploy (paths relative to project root).
-  # Can be overridden per release (set deploy_scripts: [] to skip).
-  deploy_scripts:
-    - misc/chart/deploy-scripts/migrate.sh
-  # Named helm releases. Inherently project-specific — the entries below
-  # are examples showing the field shape. Each release targets exactly one
-  # entry in `targets:` below.
-  releases:
-    other:
-      release_name: my-app-other     # helm release name passed to `helm upgrade`
-      target: dev                    # must match a key in targets:
-      values:                        # values files (relative to values_dir)
-        - dev.yaml
-        - dev-other.yaml
-    v1:
-      release_name: my-app-v1
-      target: local
-      values:
-        - local.yaml
-      deploy_scripts: []             # override top-level scripts; [] = skip
-
-# --- Terraform ---
-terraform:
-  # Path to IaC directory (swoop discovery base for centralised IaC repos).
-  # Default: "" (project root).
-  iac_dir: misc/iac
-  # command can also be set here to pin the CLI per-project (e.g. "tofu").
-  # Project overrides global. $KEST_TERRAFORM_COMMAND overrides both.
-  # Default: "".
-  command: ""
-  # version_manager can also be set here to pin the manager per-project.
-  # Project overrides global. $KEST_TERRAFORM_VERSION_MANAGER overrides
-  # both. Default: "".
-  version_manager: ""
-  # default_version can also be set here to pin a project-wide terraform
-  # version for write_version. Default: "".
-  default_version: ""
-
-# --- Targets ---
-# Named deployment targets binding a cluster + AWS account + region. Helm
-# releases reference these by key; swoop also resolves through them.
-# Inherently project-specific — the entries below are examples.
-targets:
-  dev:
-    cluster: eks-dev               # must resolve via kubernetes.contexts above
-    aws_account: "111122223333"    # must resolve via aws.accounts above
-    region: us-east-1
-  prod:
-    cluster: eks-prd
-    aws_account: "444455556666"
-    region: us-east-1
-  local:
-    cluster: kind-local            # cluster-only targets are valid (no AWS)
-
-# --- Directories (swoop only) ---
-# For centralised-IaC repos: map a top-level directory name to an AWS
-# account ID, so swoop can resolve credentials by path even when a root
-# has no provider/account in its .tf files. Inherently project-specific.
-directories:
-  prd: "444455556666"
-  dev: "111122223333"
-```
 
 ## How resolution works
 
