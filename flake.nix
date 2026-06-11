@@ -122,6 +122,23 @@
             runHook postCheck
           '';
         });
+        # Compat smoke: exercises the terraform/tofu binary-override surface
+        # by running real terraform and opentofu binaries through kest.
+        terraform-compat =
+          pkgs.runCommand "kest-terraform-compat"
+            {
+              nativeBuildInputs = [
+                pkgs.kest
+                pkgs.terraform
+                pkgs.opentofu
+                pkgs.bash
+              ];
+            }
+            ''
+              export HOME=$TMPDIR
+              bash ${./test/compat/compat.sh} ${pkgs.kest}/bin/kest
+              touch $out
+            '';
       });
 
       devShells = eachSystem (pkgs: {

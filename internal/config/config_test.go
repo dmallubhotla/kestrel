@@ -153,7 +153,7 @@ swoop:
   editor: nvim
   sort_order: alpha
 terraform:
-  auto_install_tfenv: true
+  auto_install_pinned: true
   write_version: true
   default_version: "1.9.2"
 `), 0o644); err != nil {
@@ -174,8 +174,8 @@ terraform:
 	if cfg.Swoop.SortOrder != "alpha" {
 		t.Errorf("Swoop.SortOrder = %q, want %q", cfg.Swoop.SortOrder, "alpha")
 	}
-	if !cfg.Terraform.AutoInstallTfenv {
-		t.Error("Terraform.AutoInstallTfenv should be true")
+	if !cfg.Terraform.AutoInstallPinned {
+		t.Error("Terraform.AutoInstallPinned should be true")
 	}
 	if !cfg.Terraform.WriteVersion {
 		t.Error("Terraform.WriteVersion should be true")
@@ -193,9 +193,9 @@ func TestCompose_SwoopFromUser(t *testing.T) {
 			SortOrder: "alpha",
 		},
 		Terraform: TerraformConfig{
-			AutoInstallTfenv: true,
-			WriteVersion:     true,
-			DefaultVersion:   "1.9.2",
+			AutoInstallPinned: true,
+			WriteVersion:      true,
+			DefaultVersion:    "1.9.2",
 		},
 	}
 	project := &Config{
@@ -215,8 +215,8 @@ func TestCompose_SwoopFromUser(t *testing.T) {
 	if out.Swoop.SortOrder != "alpha" {
 		t.Errorf("Swoop.SortOrder = %q, want %q", out.Swoop.SortOrder, "alpha")
 	}
-	if !out.Terraform.AutoInstallTfenv {
-		t.Error("Terraform.AutoInstallTfenv should be preserved from user config")
+	if !out.Terraform.AutoInstallPinned {
+		t.Error("Terraform.AutoInstallPinned should be preserved from user config")
 	}
 	if !out.Terraform.WriteVersion {
 		t.Error("Terraform.WriteVersion should be preserved from user config")
@@ -672,5 +672,102 @@ helm:
 	// Top-level deploy scripts
 	if len(cfg.Helm.DeployScripts) != 1 || cfg.Helm.DeployScripts[0] != "migrate.sh" {
 		t.Errorf("helm.deploy_scripts = %v", cfg.Helm.DeployScripts)
+	}
+}
+
+func TestTerraformCommand(t *testing.T) {
+	t.Setenv("KEST_TERRAFORM_COMMAND", "")
+
+	// Default: "terraform".
+	if got := (&Config{}).TerraformCommand(); got != "terraform" {
+		t.Errorf("default: got %q, want terraform", got)
+	}
+
+	// Config value.
+	c := &Config{Terraform: TerraformConfig{Command: "tofu"}}
+	if got := c.TerraformCommand(); got != "tofu" {
+		t.Errorf("from config: got %q, want tofu", got)
+	}
+
+	// Env var overrides config.
+	t.Setenv("KEST_TERRAFORM_COMMAND", "/opt/bin/tofu")
+	if got := c.TerraformCommand(); got != "/opt/bin/tofu" {
+		t.Errorf("env override: got %q, want /opt/bin/tofu", got)
+	}
+
+	// Nil receiver is safe (used by doctor when config load fails).
+	t.Setenv("KEST_TERRAFORM_COMMAND", "")
+	var nilCfg *Config
+	if got := nilCfg.TerraformCommand(); got != "terraform" {
+		t.Errorf("nil receiver: got %q, want terraform", got)
+	}
+}
+
+func TestCompose_ProjectOverridesCommand(t *testing.T) {
+	user := &Config{Terraform: TerraformConfig{Command: "terraform"}}
+	project := &Config{Terraform: TerraformConfig{Command: "tofu"}}
+	out := compose(user, project)
+	if out.Terraform.Command != "tofu" {
+		t.Errorf("project command override: got %q, want tofu", out.Terraform.Command)
+	}
+}
+
+func TestTerraformVersionManager(t *testing.T) {
+	t.Setenv("KEST_TERRAFORM_VERSION_MANAGER", "")
+
+	// Default with command=terraform → tfenv.
+	if got := (&Config{}).TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("default: got %q, want tfenv", got)
+	}
+
+	// Command=tofu → auto-detect tofuenv.
+	c := &Config{Terraform: TerraformConfig{Command: "tofu"}}
+	if got := c.TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("tofu auto-detect: got %q, want tofuenv", got)
+	}
+
+	// $KEST_TERRAFORM_COMMAND=tofu must also flip the auto-detect even
+	// when config has no command set (and even on a nil receiver).
+	t.Setenv("KEST_TERRAFORM_COMMAND", "tofu")
+	if got := (&Config{}).TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("env-driven tofu auto-detect: got %q, want tofuenv", got)
+	}
+	var nilCfg *Config
+	if got := nilCfg.TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("env-driven tofu auto-detect (nil receiver): got %q, want tofuenv", got)
+	}
+	t.Setenv("KEST_TERRAFORM_COMMAND", "")
+
+	// Explicit config value wins over auto-detect.
+	c.Terraform.VersionManager = "tfenv"
+	if got := c.TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("explicit override: got %q, want tfenv", got)
+	}
+
+	// "off" is propagated verbatim — callers handle the sentinel.
+	c.Terraform.VersionManager = "off"
+	if got := c.TerraformVersionManager(); got != "off" {
+		t.Errorf("off sentinel: got %q, want off", got)
+	}
+
+	// Env var overrides config.
+	t.Setenv("KEST_TERRAFORM_VERSION_MANAGER", "tofuenv")
+	if got := c.TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("env override: got %q, want tofuenv", got)
+	}
+
+	// Nil receiver is safe.
+	t.Setenv("KEST_TERRAFORM_VERSION_MANAGER", "")
+	if got := nilCfg.TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("nil receiver: got %q, want tfenv", got)
+	}
+}
+
+func TestCompose_ProjectOverridesVersionManager(t *testing.T) {
+	user := &Config{Terraform: TerraformConfig{VersionManager: "tfenv"}}
+	project := &Config{Terraform: TerraformConfig{VersionManager: "tofuenv"}}
+	out := compose(user, project)
+	if out.Terraform.VersionManager != "tofuenv" {
+		t.Errorf("project manager override: got %q, want tofuenv", out.Terraform.VersionManager)
 	}
 }

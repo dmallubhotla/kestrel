@@ -109,7 +109,7 @@ func executeCIAction(action string, root swoop.Root, baseDir string) error {
 	}
 	fmt.Fprintln(os.Stderr)
 
-	result, err := swoop.RunTerraform(root, awsProfile, action)
+	result, err := swoop.RunTerraform(cfg.TerraformCommand(), root, awsProfile, action)
 
 	// Record to local state.
 	state, stateErr := swoop.LoadState(baseDir)

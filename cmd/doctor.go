@@ -169,7 +169,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 // --- tool checks ---
 
 var (
-	reTerraformVer = regexp.MustCompile(`Terraform v(\d+\.\d+\.\d+)`)
+	reTerraformVer = regexp.MustCompile(`(?:Terraform|OpenTofu) v(\d+\.\d+\.\d+)`)
 	reHelmVer      = regexp.MustCompile(`v(\d+\.\d+\.\d+)`)
 	reKubectlVer   = regexp.MustCompile(`"gitVersion":\s*"v(\d+\.\d+\.\d+)`)
 	reAWSVer       = regexp.MustCompile(`aws-cli/(\d+\.\d+\.\d+)`)
@@ -199,7 +199,7 @@ func checkToolWithVersion(name string, versionArgs []string, re *regexp.Regexp) 
 
 func checkTools(awsFound bool) checkSection {
 	checks := []checkResult{
-		checkToolWithVersion("terraform", []string{"version"}, reTerraformVer),
+		checkToolWithVersion(cfg.TerraformCommand(), []string{"version"}, reTerraformVer),
 		checkToolWithVersion("helm", []string{"version", "--short"}, reHelmVer),
 		checkToolWithVersion("kubectl", []string{"version", "--client", "-o", "json"}, reKubectlVer),
 	}
@@ -218,11 +218,13 @@ func checkTools(awsFound bool) checkSection {
 		checks = append(checks, checkResult{status: statusFail, label: "aws", detail: "not found"})
 	}
 
-	// tfenv is optional.
-	if toolExists("tfenv") {
-		checks = append(checks, checkResult{status: statusPass, label: "tfenv"})
-	} else {
-		checks = append(checks, checkResult{status: statusWarn, label: "tfenv", detail: "not found (optional)"})
+	// Version manager (tfenv / tofuenv / off) — optional.
+	if manager := cfg.TerraformVersionManager(); manager != "off" {
+		if toolExists(manager) {
+			checks = append(checks, checkResult{status: statusPass, label: manager})
+		} else {
+			checks = append(checks, checkResult{status: statusWarn, label: manager, detail: "not found (optional)"})
+		}
 	}
 
 	return checkSection{name: "Tools", checks: checks}

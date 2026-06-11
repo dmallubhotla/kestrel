@@ -110,6 +110,48 @@ func TestDiscover_TFVersionReading(t *testing.T) {
 	}
 }
 
+func TestDiscover_OpentofuVersionReading(t *testing.T) {
+	base := t.TempDir()
+
+	root := filepath.Join(base, "dev", "vpc")
+	createTFRoot(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".opentofu-version"), []byte("1.8.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 {
+		t.Fatalf("got %d roots, want 1", len(roots))
+	}
+	if roots[0].TFVersion != "1.8.0" {
+		t.Errorf("TFVersion = %q, want %q", roots[0].TFVersion, "1.8.0")
+	}
+}
+
+func TestDiscover_OpentofuVersionWinsOverTerraformVersion(t *testing.T) {
+	base := t.TempDir()
+
+	root := filepath.Join(base, "dev", "vpc")
+	createTFRoot(t, root)
+	if err := os.WriteFile(filepath.Join(root, ".terraform-version"), []byte("1.9.2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".opentofu-version"), []byte("1.8.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots, err := Discover(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots[0].TFVersion != "1.8.0" {
+		t.Errorf("expected .opentofu-version to win, got TFVersion=%q", roots[0].TFVersion)
+	}
+}
+
 func TestDiscover_InitDetection(t *testing.T) {
 	base := t.TempDir()
 

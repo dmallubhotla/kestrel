@@ -13,6 +13,7 @@ import (
 	"github.com/dmallubhotla/kestrel/internal/awsconfig"
 	"github.com/dmallubhotla/kestrel/internal/config"
 	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
+	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -235,20 +236,45 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// terraform preferences (only if terraform/tfenv available)
-	if toolExists("terraform") {
-		global.Terraform.AutoInstallTfenv, err = boolPrompt("Auto-install terraform via tfenv on version mismatch?", global.Terraform.AutoInstallTfenv)
+	// terraform preferences (only if the configured command is available)
+	tfCommand := global.TerraformCommand()
+	if toolExists(tfCommand) {
+		// version manager: suggest tofuenv when command is tofu, else tfenv.
+		// "off" disables kest's version-manager integration entirely.
+		managerDefault := "tfenv"
+		if tfCommand == "tofu" {
+			managerDefault = "tofuenv"
+		}
+		global.Terraform.VersionManager, err = choicePrompt(
+			"Terraform version manager",
+			[]string{"tfenv", "tofuenv", "off"},
+			global.Terraform.VersionManager,
+			managerDefault,
+		)
 		if err != nil {
 			return err
 		}
 
-		global.Terraform.WriteVersion, err = boolPrompt("Write .terraform-version into roots that lack one?", global.Terraform.WriteVersion)
+		manager := global.TerraformVersionManager()
+		if manager != "off" {
+			prompt := fmt.Sprintf("Auto-install pinned terraform version via %s on mismatch?", manager)
+			global.Terraform.AutoInstallPinned, err = boolPrompt(prompt, global.Terraform.AutoInstallPinned)
+			if err != nil {
+				return err
+			}
+		}
+
+		pinFile := swoop.VersionFileFor(manager)
+		global.Terraform.WriteVersion, err = boolPrompt(
+			fmt.Sprintf("Write %s into roots that lack one?", pinFile),
+			global.Terraform.WriteVersion,
+		)
 		if err != nil {
 			return err
 		}
 
 		if global.Terraform.WriteVersion {
-			global.Terraform.DefaultVersion, err = defaultVersionPrompt(global.Terraform.DefaultVersion)
+			global.Terraform.DefaultVersion, err = defaultVersionPrompt(tfCommand, pinFile, global.Terraform.DefaultVersion)
 			if err != nil {
 				return err
 			}
@@ -473,12 +499,14 @@ func choicePrompt(title string, options []string, current, defaultVal string) (s
 
 // defaultVersionPrompt asks the user to pick a default terraform version.
 // Detects the currently active version and offers it alongside "(none)".
-func defaultVersionPrompt(current string) (string, error) {
+// pinFile is the filename the version will be written to (used for the prompt
+// label only).
+func defaultVersionPrompt(command, pinFile, current string) (string, error) {
 	items := []selectItem{{name: "(detect at runtime)"}}
 	preselect := 0
 
 	// Detect active terraform version.
-	if out, err := exec.Command("terraform", "version").Output(); err == nil {
+	if out, err := exec.Command(command, "version").Output(); err == nil {
 		if v := parseTFVersionOutput(string(out)); v != "" {
 			items = append(items, selectItem{name: v})
 			if current == v {
@@ -502,7 +530,7 @@ func defaultVersionPrompt(current string) (string, error) {
 	}
 
 	m := singleSelectModel{
-		title:  "Default terraform version for .terraform-version",
+		title:  fmt.Sprintf("Default terraform version for %s", pinFile),
 		cursor: preselect,
 		items:  items,
 	}
@@ -523,12 +551,16 @@ func defaultVersionPrompt(current string) (string, error) {
 	return chosen, nil
 }
 
-// parseTFVersionOutput extracts the version from `terraform version` output.
+// parseTFVersionOutput extracts the version from `terraform version` or
+// `tofu version` output.
 func parseTFVersionOutput(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Terraform v") {
-			return strings.TrimPrefix(line, "Terraform v")
+		if v, ok := strings.CutPrefix(line, "Terraform v"); ok {
+			return v
+		}
+		if v, ok := strings.CutPrefix(line, "OpenTofu v"); ok {
+			return v
 		}
 	}
 	return ""
