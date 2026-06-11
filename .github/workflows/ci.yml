@@ -9,18 +9,27 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        env:
+          INCLUDE_DARWIN: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master' }}
+        run: |
+          if [[ "$INCLUDE_DARWIN" == "true" ]]; then
+            echo 'matrix={"include":[{"target":"linux-amd64","runs-on":"ubuntu-latest","timeout":20},{"target":"linux-arm64","runs-on":"ubuntu-24.04-arm","timeout":20},{"target":"darwin-arm64","runs-on":"macos-15","timeout":30}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"include":[{"target":"linux-amd64","runs-on":"ubuntu-latest","timeout":20},{"target":"linux-arm64","runs-on":"ubuntu-24.04-arm","timeout":20}]}' >> "$GITHUB_OUTPUT"
+          fi
   build:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: linux-amd64
-            runs-on: ubuntu-latest
-          - target: linux-arm64
-            runs-on: ubuntu-24.04-arm
-          - target: darwin-arm64
-            runs-on: macos-14
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: ${{ matrix.timeout }}
     permissions:
       contents: read
       id-token: write
