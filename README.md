@@ -71,9 +71,8 @@ terraform:
   # Overridden at runtime by $KEST_TERRAFORM_COMMAND.
   command: "terraform"
   # Version-manager CLI kest uses for version-pin handling.
-  # "tfenv", "tofuenv", or "off". Empty auto-detects: "tofuenv" when the
-  # resolved command is "tofu", else "tfenv". Overridden by
-  # $KEST_TERRAFORM_VERSION_MANAGER. See "Terraform vs OpenTofu" below.
+  # "tfenv", "tofuenv", or "off". Empty defaults to "tfenv".
+  # Overridden by $KEST_TERRAFORM_VERSION_MANAGER.
   version_manager: ""
   # Automatically install the pinned terraform version (from the
   # version-pin file) via the configured version_manager on mismatch,
@@ -186,8 +185,8 @@ The `version_manager` knob picks which companion CLI kest probes for
 pinning workflows. Pick whichever your repo uses; kest itself stays binary-
 agnostic:
 
-- `tfenv` (default when command is `terraform`) — reads `.terraform-version`
-- `tofuenv` (auto-default when command is `tofu`) — reads `.opentofu-version`
+- `tfenv` (default) — reads `.terraform-version`
+- `tofuenv` — reads `.opentofu-version`
 - `off` — disable kest's version-manager integration entirely: no PATH
   probe, no install offers, no mismatch warnings about a missing manager
 

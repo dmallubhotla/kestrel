@@ -715,33 +715,32 @@ func TestCompose_ProjectOverridesCommand(t *testing.T) {
 func TestTerraformVersionManager(t *testing.T) {
 	t.Setenv("KEST_TERRAFORM_VERSION_MANAGER", "")
 
-	// Default with command=terraform → tfenv.
+	// Default → tfenv.
 	if got := (&Config{}).TerraformVersionManager(); got != "tfenv" {
 		t.Errorf("default: got %q, want tfenv", got)
 	}
 
-	// Command=tofu → auto-detect tofuenv.
 	c := &Config{Terraform: TerraformConfig{Command: "tofu"}}
-	if got := c.TerraformVersionManager(); got != "tofuenv" {
-		t.Errorf("tofu auto-detect: got %q, want tofuenv", got)
+	if got := c.TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("command must not infer manager: got %q, want tfenv", got)
 	}
 
-	// $KEST_TERRAFORM_COMMAND=tofu must also flip the auto-detect even
-	// when config has no command set (and even on a nil receiver).
+	// $KEST_TERRAFORM_COMMAND=tofu must not flip it either — a one-off binary
+	// swap can't change which pin file kest writes.
 	t.Setenv("KEST_TERRAFORM_COMMAND", "tofu")
-	if got := (&Config{}).TerraformVersionManager(); got != "tofuenv" {
-		t.Errorf("env-driven tofu auto-detect: got %q, want tofuenv", got)
+	if got := (&Config{}).TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("env command must not infer manager: got %q, want tfenv", got)
 	}
 	var nilCfg *Config
-	if got := nilCfg.TerraformVersionManager(); got != "tofuenv" {
-		t.Errorf("env-driven tofu auto-detect (nil receiver): got %q, want tofuenv", got)
+	if got := nilCfg.TerraformVersionManager(); got != "tfenv" {
+		t.Errorf("env command must not infer manager (nil receiver): got %q, want tfenv", got)
 	}
 	t.Setenv("KEST_TERRAFORM_COMMAND", "")
 
-	// Explicit config value wins over auto-detect.
-	c.Terraform.VersionManager = "tfenv"
-	if got := c.TerraformVersionManager(); got != "tfenv" {
-		t.Errorf("explicit override: got %q, want tfenv", got)
+	// Explicit config value selects the manager.
+	c.Terraform.VersionManager = "tofuenv"
+	if got := c.TerraformVersionManager(); got != "tofuenv" {
+		t.Errorf("explicit config: got %q, want tofuenv", got)
 	}
 
 	// "off" is propagated verbatim — callers handle the sentinel.

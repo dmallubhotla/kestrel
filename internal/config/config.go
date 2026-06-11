@@ -88,11 +88,9 @@ type TerraformConfig struct {
 	// the $KEST_TERRAFORM_COMMAND environment variable.
 	Command string `yaml:"command,omitempty"`
 
-	// VersionManager is the version-manager CLI kest uses for
-	// .terraform-version handling: "tfenv", "tofuenv", or "off" to disable
-	// kest's version-manager integration entirely. Empty auto-detects:
-	// "tofuenv" when Command is "tofu", else "tfenv". Overridden by
-	// $KEST_TERRAFORM_VERSION_MANAGER.
+	// VersionManager is the version-manager CLI kest uses for pin-file
+	// handling: "tfenv", "tofuenv", or "off" to disable it entirely. Empty
+	// defaults to "tfenv". Overridden by $KEST_TERRAFORM_VERSION_MANAGER.
 	VersionManager string `yaml:"version_manager,omitempty"`
 
 	// WriteVersion writes a .terraform-version file into roots that lack
@@ -339,15 +337,11 @@ func (c *Config) TerraformCommand() string {
 	return "terraform"
 }
 
-// TerraformVersionManager returns the version-manager CLI kest uses for
-// .terraform-version handling. Possible return values:
-//   - "off": user explicitly disabled version-manager integration
-//   - "tfenv" / "tofuenv" / other: the CLI to invoke
-//
+// TerraformVersionManager returns the version-manager CLI ("tfenv", "tofuenv",
+// or "off" to disable) kest uses for pin-file handling.
 // Resolution order: $KEST_TERRAFORM_VERSION_MANAGER → cfg.Terraform.VersionManager
-// → auto-detect ("tofuenv" if the resolved terraform command is "tofu",
-// else "tfenv"). Auto-detect respects $KEST_TERRAFORM_COMMAND so an env
-// override of the command also flips the manager default.
+// → "tfenv". Deliberately NOT inferred from the terraform command, so a one-off
+// $KEST_TERRAFORM_COMMAND swap can't change which pin file kest writes.
 // Safe to call on a nil receiver.
 func (c *Config) TerraformVersionManager() string {
 	if env := os.Getenv("KEST_TERRAFORM_VERSION_MANAGER"); env != "" {
@@ -355,9 +349,6 @@ func (c *Config) TerraformVersionManager() string {
 	}
 	if c != nil && c.Terraform.VersionManager != "" {
 		return c.Terraform.VersionManager
-	}
-	if c.TerraformCommand() == "tofu" {
-		return "tofuenv"
 	}
 	return "tfenv"
 }

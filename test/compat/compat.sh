@@ -132,10 +132,15 @@ out=$("$KEST" doctor 2>&1 || true)
 assert_contains "doctor reports tfenv not found" "tfenv" "$out"
 assert_contains "doctor tfenv warning text" "not found" "$out"
 
-# $KEST_TERRAFORM_COMMAND=tofu must also flip the manager auto-detect to
-# tofuenv (otherwise tfenv users on tofu would get the wrong probe).
+# $KEST_TERRAFORM_COMMAND=tofu must NOT flip the manager — a one-off binary
+# swap can't change which pin file kest writes, so the probe stays tfenv.
 out=$(KEST_TERRAFORM_COMMAND=tofu "$KEST" doctor 2>&1 || true)
-assert_contains "doctor reports tofuenv when command=tofu" "tofuenv" "$out"
+assert_contains "doctor keeps tfenv when only command=tofu" "tfenv" "$out"
+assert_not_contains "doctor does not infer tofuenv from command" "tofuenv" "$out"
+
+# Selecting the manager explicitly (env) flips the probe to tofuenv.
+out=$(KEST_TERRAFORM_VERSION_MANAGER=tofuenv "$KEST" doctor 2>&1 || true)
+assert_contains "doctor reports tofuenv when version_manager=tofuenv" "tofuenv" "$out"
 
 # With version_manager: off in config, doctor must NOT list any manager.
 proj=$(mkproject)
