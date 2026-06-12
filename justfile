@@ -6,6 +6,25 @@ default:
 build:
     nix build
 
+# build the docker image (linux only) as a docker-archive at ./result-docker
+docker-build:
+    nix build .#docker -o result-docker
+
+# load the built docker image into docker
+docker-load:
+    docker load < result-docker
+
+# build and load in one step
+docker: docker-build docker-load
+
+# shell into the most recently built image
+docker-exec:
+    docker run -it --rm "$(docker load -q < result-docker | sed -n 's/^Loaded image: //p')" bash
+
+# explore the image layers with dive
+docker-dive:
+    nix run nixpkgs#dive -- "$(docker load -q < result-docker | sed -n 's/^Loaded image: //p')"
+
 # run go tests via nix develop
 test:
     nix flake check
