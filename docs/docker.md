@@ -23,7 +23,18 @@ The container runs as `kest` (uid 1000) with home `/home/kest` and working direc
 docker run --rm ghcr.io/dmallubhotla/kestrel:latest kest --version
 ```
 
-For real work, kest reads everything from a handful of well-known paths — bind-mount each from your machine:
+For real work, run it from your project repo with your config mounted in:
+
+```sh
+docker run --rm -it \
+  -v "$PWD:/work" \
+  -v "$HOME/.config/kest:/home/kest/.config/kest" \
+  -v "$HOME/.aws:/home/kest/.aws" \
+  -v "$HOME/.kube:/home/kest/.kube" \
+  ghcr.io/dmallubhotla/kestrel kest doctor
+```
+
+kest reads everything from a handful of well-known paths — each mount above maps one from your machine:
 
 | Host path | Container path | Why |
 | --- | --- | --- |
@@ -102,6 +113,7 @@ Linux only (`dockerTools`):
 just docker        # nix build .#docker + docker load
 just docker-exec   # bash inside the freshly built image
 just docker-dive   # layer-by-layer size exploration
+just dkest <args>  # kest from the freshly built image, with the dkest alias mounts
 ```
 
 The image is defined in `flake.nix` (`dockerImageFor`); its version tag and OCI labels are stamped from the flake `version`, which `hanko seal` maintains. Release publishing happens in CI on `v*` tags via [`scripts/deploy-image.sh`](../scripts/deploy-image.sh).

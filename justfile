@@ -25,6 +25,16 @@ docker-exec:
 docker-dive:
     nix run nixpkgs#dive -- "$(docker load -q < result-docker | sed -n 's/^Loaded image: //p')"
 
+# run kest from the most recently built image with the dkest mounts (see docs/docker.md)
+dkest *args:
+    docker run --rm -it \
+      -v "{{invocation_directory()}}:/work" \
+      -v "$HOME/.config/kest:/home/kest/.config/kest" \
+      -v "$HOME/.aws:/home/kest/.aws" \
+      -v "$HOME/.kube:/home/kest/.kube" \
+      -v "$HOME/.local/state/kest:/home/kest/.local/state/kest" \
+      "$(docker load -q < result-docker | sed -n 's/^Loaded image: //p')" kest {{args}}
+
 # run go tests via nix develop
 test:
     nix flake check
