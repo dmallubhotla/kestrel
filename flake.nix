@@ -91,6 +91,7 @@
             kubectl
             awscli2
             gitReallyMinimal
+            gh
             bashInteractive
             coreutils
             dockerTools.caCertificates

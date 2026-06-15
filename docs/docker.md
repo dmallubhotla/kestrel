@@ -10,6 +10,7 @@ Every release publishes `ghcr.io/dmallubhotla/kestrel` (linux amd64/arm64), tagg
 | `kubectl` | context switching (`kest exec`, `kest profile`, `kest context`) |
 | `aws` | SSO login, session checks, `eks update-kubeconfig` (kestci), and the `aws eks get-token` exec plugin your kubeconfig uses for every EKS API call |
 | `git` | clean-worktree / branch guards, image-tag resolution from git describe |
+| `gh` | GitHub credential helper for git operations against private repos |
 | `bash` | deploy scripts |
 
 The container runs as `kest` (uid 1000) with home `/home/kest` and working directory `/work`. Since `HOME` is env-set rather than uid-derived, any `--user` override works too (`/home/kest` is writable by all uids):
