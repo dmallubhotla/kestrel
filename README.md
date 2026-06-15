@@ -23,6 +23,31 @@ curl -fsSL https://github.com/dmallubhotla/kestrel/releases/latest/download/inst
 
 See [`scripts/install.sh`](scripts/install.sh) or run it with `--help` for options.
 
+### Docker
+
+Every release also publishes a container image to ghcr with `kest`, `kestci`, and the tools they shell out to (terraform, opentofu, helm, kubectl, aws, git) bundled:
+
+```sh
+docker run --rm ghcr.io/dmallubhotla/kestrel:latest kest --version
+```
+
+Tags follow the release version (`0.2.0`, `0.2`, `0`, `latest`), multi-arch for linux amd64/arm64. Mount your project and AWS config to do real work:
+
+```sh
+docker run --rm -it \
+  -v "$PWD:/work" \
+  -v "$HOME/.aws:/home/kest/.aws" \
+  ghcr.io/dmallubhotla/kestrel kest doctor
+```
+
+See [docs/docker.md](docs/docker.md) for full running instructions — which config paths to mount where, AWS SSO from a container, and using `kestci` as a CI job image.
+
+The image pins its own terraform and opentofu (repos with `terraform.command: tofu` just work), so kest's version-manager integration is disabled inside it (`KEST_TERRAFORM_VERSION_MANAGER=off`).
+
+Build it locally on linux with `just docker` (`nix build .#docker` + `docker load`).
+
+### Building from source
+
 Kest is built with Nix:
 
 ```sh
