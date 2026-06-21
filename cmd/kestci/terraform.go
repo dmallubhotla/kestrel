@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/dmallubhotla/kestrel/internal/guard"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
 	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
@@ -96,35 +95,15 @@ func runTerraformAction(action, target string) error {
 }
 
 func executeCIAction(action string, root swoop.Root, baseDir string) error {
-	// Resolve AWS profile — CI uses ambient credentials, so this may be
-	// empty. That's fine; terraform will use env vars directly.
-	awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
-
-	fmt.Fprintf(os.Stderr, "root:    %s\n", root.Path)
-	if awsProfile != "" {
-		fmt.Fprintf(os.Stderr, "aws:     %s\n", awsProfile)
-	}
-	if root.TFVersion != "" {
-		fmt.Fprintf(os.Stderr, "tf:      %s\n", root.TFVersion)
-	}
-	fmt.Fprintln(os.Stderr)
-
-	result, err := swoop.RunTerraform(cfg.TerraformCommand(), root, awsProfile, action)
-
-	// Record to local state.
-	state, stateErr := swoop.LoadState(baseDir)
-	if stateErr == nil && result != nil {
-		switch action {
-		case "init":
-			state.RecordInit(root.Path)
-		case "plan":
-			state.RecordPlan(root.Path, result.PlanSummary)
-		case "apply":
-			state.RecordApply(root.Path)
-		}
-		_ = state.Save()
-	}
-
+	// Same resolution as `kest swoop` (incl. the S3-backend assume_role
+	// fallback), but executed under the ambient-credential policy: CI gets its
+	// credentials from the environment (OIDC / env vars), so the resolved
+	// profile is echoed for legibility but never injected as AWS_PROFILE.
+	res := swoop.EffectiveProfiles(cfg, root, environment)
+	_, err := swoop.Execute(cfg, root, baseDir, action, res, swoop.Policy{
+		Ambient:      true,
+		PrintContext: true,
+	})
 	if err != nil {
 		return fmt.Errorf("terraform %s failed: %w", action, err)
 	}

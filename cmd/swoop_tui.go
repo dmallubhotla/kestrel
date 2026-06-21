@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
 	"github.com/dmallubhotla/kestrel/internal/swoop"
 )
 
@@ -39,14 +38,23 @@ type swoopTUIModel struct {
 	phase      swoopPhase
 	actionIdx  int // index into swoopActions
 	pickedRoot swoop.Root
+
+	// profiles maps root.Path to its effective AWS profile, precomputed once
+	// (EffectiveProfiles reads backend .tf files) rather than per render.
+	profiles map[string]string
 }
 
 func newSwoopTUI(roots []swoop.Root, state *swoop.State) swoopTUIModel {
+	profiles := make(map[string]string, len(roots))
+	for _, r := range roots {
+		profiles[r.Path] = swoop.EffectiveProfiles(cfg, r, environment).Effective
+	}
 	return swoopTUIModel{
 		allRoots: roots,
 		filtered: roots,
 		state:    state,
 		width:    80,
+		profiles: profiles,
 	}
 }
 
@@ -221,7 +229,7 @@ func (m swoopTUIModel) viewRootPicker() string {
 			}
 			// Show dir and AWS profile. Arrow indicates the AWS resolution.
 			tag := r.Dir
-			if aws := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment); aws != "" && aws != r.Dir {
+			if aws := m.profiles[r.Path]; aws != "" && aws != r.Dir {
 				tag = fmt.Sprintf("%s → %s", r.Dir, aws)
 			}
 			row.dirTag = tag
@@ -382,8 +390,7 @@ func (m swoopTUIModel) renderPreview(r swoop.Root) string {
 		}
 	}
 
-	awsProfile := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)
-	if awsProfile != "" {
+	if awsProfile := m.profiles[r.Path]; awsProfile != "" {
 		writeField("aws", awsProfile)
 	}
 

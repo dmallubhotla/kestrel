@@ -8,7 +8,6 @@ import (
 	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
 	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
@@ -230,7 +229,8 @@ func printRootTable(roots []swoop.Root, state *swoop.State) {
 
 		activity := lastActivityStr(state, r.Path)
 
-		aws := resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)
+		// Effective profile the executor would use, incl. backend fallback.
+		aws := swoop.EffectiveProfiles(cfg, r, environment).Effective
 		if aws == "" {
 			aws = "-"
 		}
