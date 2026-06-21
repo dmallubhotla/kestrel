@@ -179,7 +179,7 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// --- Kube contexts: select which contexts to configure ---
+	// --- Kube contexts: select which contexts kestrel will target ---
 	if kubeErr == nil && len(kubeContexts) > 0 {
 		// Pre-select contexts that are already configured.
 		preselected := make(map[int]bool)
@@ -192,8 +192,17 @@ func runAutoconfigure(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// On first run (no global config yet), explain what this picker does.
+		if _, statErr := os.Stat(config.GlobalConfigPath()); os.IsNotExist(statErr) {
+			fmt.Println("Pick the kube contexts kestrel should target.")
+			fmt.Println("Selected ones get recorded in kestrel's config so .kestconfig targets can resolve to them.")
+			fmt.Println("Your kubeconfig is read-only here — nothing gets added, removed, or modified there.")
+			fmt.Println("(a kestrel's gotta know what it's swooping on — SQUAAAWK)")
+			fmt.Println()
+		}
+
 		m := multiSelectModel{
-			title:    "Select kube contexts",
+			title:    "Targets for kestrel to swoop on",
 			items:    make([]selectItem, len(kubeContexts)),
 			selected: preselected,
 		}
