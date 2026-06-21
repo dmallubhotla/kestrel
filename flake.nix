@@ -239,6 +239,11 @@
             golangci-lint
             go-tools
             gopls
+            terraform
+            opentofu
+            kubernetes-helm
+            kubectl
+            awscli2
             gomod2nix.packages.${pkgs.stdenv.hostPlatform.system}.default
             hanko.packages.${pkgs.stdenv.hostPlatform.system}.default
           ];
