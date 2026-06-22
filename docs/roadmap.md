@@ -93,4 +93,12 @@ The homelab is the atypical consumer of kest (non-AWS providers, LAN-only, non-E
 **Still open:**
 - **Plan surfacing:** `PlanSummary` is recorded to local state, which is ephemeral on a runner. PR-comment / plan-artifact workflows need plan output emitted to stdout/file, not just state.
 - **Self-hosted runners** are on the table (homelab LAN, or work-specific networks). A first step can be `kestci` commands wrapped in a `justfile` before any GitHub Actions wiring — the binary should be pleasant to drive that way too.
+- **`--changed` on kestci.** `kest swoop` scopes to roots a branch touched; `kestci` can't, so CI workflows fan out an explicit matrix instead (see [ci.md](ci.md) / [examples/ci/](examples/ci/)). Porting `--changed` (and `--dir`) onto kestci would let `kestci plan --changed` gate PRs directly.
+- **Terraform-flag passthrough.** kestci `init|plan|apply` take exactly one target and forward nothing, so CI can't pass `-detailed-exitcode` (drift detection parses "No changes" out of plan output instead), `-lock-timeout`, `-var`, etc. A trailing `-- <args>` passthrough would fix the drift-exit-code case cleanly.
+
+These two are the concrete CI-ergonomics gaps the [ci.md](ci.md) examples work around today.
+
+## Deploy routines (helm + manifests)
+
+The current helm path is OCI-chart + values-files + `aws eks update-kubeconfig` — EKS-shaped. Real non-EKS usage (proxmox-homelab: terraform-managed helm + raw `kubectl apply` app manifests on Talos) fits none of it. Design exploration of the candidate shapes — cluster-agnostic helm, a manifest-apply primitive, and a shared deploy spine with a pluggable executor — is written up in [deploy-routines.md](deploy-routines.md). Not yet scoped; helm-side work was deferred pending that discussion.
 

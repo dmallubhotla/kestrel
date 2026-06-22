@@ -1,0 +1,58 @@
+# Example: scheduled drift detection for kestci, GitHub-hosted runners.
+#
+# Runs `kestci plan` on a schedule and fails (alerting) when a root has drifted
+# from its committed config. Same public-stacks-only scoping as
+# github-plan-apply.yml.
+#
+# Note: kestci's plan can't yet forward terraform flags, so we can't use
+# `-detailed-exitcode`. We parse the plan output for "No changes" instead. See
+# docs/ci.md "Current limitations" — flag passthrough is a planned kestci
+# enhancement that would make this a clean exit-code check.
+name: terraform-drift
+
+on:
+  schedule:
+    # Weekly, Monday 13:17 UTC.
+    - cron: "17 13 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [cloudflare, ses-smtp]
+    container:
+      image: ghcr.io/dmallubhotla/kestrel:latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+          aws-region: us-east-2
+      - name: Plan and flag drift
+        run: |
+          set -o pipefail
+          kestci init "${{ matrix.root }}"
+          echo "::group::tofu plan (${{ matrix.root }})"
+          out="$(kestci plan "${{ matrix.root }}" 2>&1)" ; status=$?
+          echo "$out"
+          echo "::endgroup::"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::${{ matrix.root }}: plan failed"
+            exit "$status"
+          fi
+          if echo "$out" | grep -q "No changes"; then
+            echo "::notice::${{ matrix.root }} is in sync"
+          else
+            echo "::error::${{ matrix.root }} has drifted from committed config"
+            exit 1
+          fi
