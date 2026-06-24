@@ -162,6 +162,27 @@ helm:
   #       deploy_scripts: []           # override top-level scripts; [] = skip
   releases: {}
 
+# --- Deploys (apps: helm charts or raw manifests, cluster-agnostic) ---
+# Sibling of helm.releases for the multi-app, non-EKS path (Talos, kind, …).
+# Each entry sets exactly one source — chart: (helm) or manifests: (kubectl);
+# kest picks the executor. See docs/deploy.md. Example:
+#   deploys:
+#     homepage:                       # local in-repo chart
+#       chart: charts/app
+#       values: [deploys/homepage.yaml]
+#       namespace: homepage
+#       target: homelab
+#     authentik:                      # third-party chart from a repo
+#       chart: authentik/authentik
+#       repo: https://charts.goauthentik.io
+#       version: "2024.10.1"
+#       values: [deploys/authentik.yaml]
+#       target: homelab
+#     gitea:                          # raw manifests (kubectl apply -f dir/)
+#       manifests: k8s-manifests/gitea
+#       target: homelab
+deploys: {}
+
 # --- Terraform ---
 terraform:
   # Path to IaC directory (swoop discovery base for centralised IaC repos).
@@ -187,6 +208,10 @@ terraform:
 #       region: us-east-1
 #     local:
 #       cluster: kind-local          # cluster-only targets are valid (no AWS)
+#     homelab:
+#       cluster: admin@homelab       # a named context (Talos/kind), used as-is
+#       kubeconfig: iac-live/talos-config/kubeconfig  # optional explicit kubeconfig
+#                                    # (project-relative) for `kest deploy`
 targets: {}
 
 # --- Directories (swoop only) ---
@@ -250,6 +275,29 @@ kest release uninstall other
 ```
 
 Helm deploys layer the release's values files in order, resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
+
+### Deploy (apps: helm charts + raw manifests)
+
+For non-EKS clusters and multi-app repos (Talos, kind, k3s, …), `kest deploy`
+applies an app defined under `deploys:`, picking its executor automatically — a
+helm chart (`helm upgrade --install`) or a directory of raw manifests
+(`kubectl apply -f`):
+
+```sh
+kest deploy gitea                    # kubectl apply -f k8s-manifests/gitea/
+kest deploy homepage                 # helm upgrade --install (local or third-party chart)
+kest deploy homepage --diff          # read-only preview (helm --dry-run / kubectl diff)
+kest deploy --all --target homelab   # all apps on a target
+kest deploy gitea -- --server-side   # pass extra args to kubectl/helm
+```
+
+It shares target resolution and the guard stack with everything else, but is
+cluster-agnostic: a target's `cluster` is a named kube context (resolved via
+`kubernetes.contexts` or used literally), with an optional explicit `kubeconfig`.
+This is distinct from `kest release` above, which is the single-OCI-chart EKS
+flow with image-tag resolution. In CI use `kestci deploy` (ambient credentials,
+guards always on). Full guide: [docs/deploy.md](docs/deploy.md); worked example
+combining terraform + helm + manifests: [examples/deploy/](examples/deploy/).
 
 ### Terraform
 

@@ -116,8 +116,10 @@ func (p Policy) out() io.Writer {
 }
 
 func printContext(out io.Writer, root Root, res Resolution, pol Policy) {
-	fmt.Fprintf(out, "root:    %s\n", root.Path)
-	fmt.Fprintf(out, "dir:     %s\n", root.Dir)
+	p := func(format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
+
+	p("root:    %s\n", root.Path)
+	p("dir:     %s\n", root.Dir)
 
 	switch {
 	case pol.Ambient:
@@ -125,22 +127,22 @@ func printContext(out io.Writer, root Root, res Resolution, pol Policy) {
 		// legible instead of a cryptic backend auth error.
 		switch {
 		case res.AccountID != "" && res.Effective != "":
-			fmt.Fprintf(out, "aws:     ambient (expect account %s, profile %s)\n", res.AccountID, res.Effective)
+			p("aws:     ambient (expect account %s, profile %s)\n", res.AccountID, res.Effective)
 		case res.AccountID != "":
-			fmt.Fprintf(out, "aws:     ambient (expect account %s)\n", res.AccountID)
+			p("aws:     ambient (expect account %s)\n", res.AccountID)
 		case res.Effective != "":
-			fmt.Fprintf(out, "aws:     ambient (expect profile %s)\n", res.Effective)
+			p("aws:     ambient (expect profile %s)\n", res.Effective)
 		default:
-			fmt.Fprintf(out, "aws:     ambient\n")
+			p("aws:     ambient\n")
 		}
 	case res.Effective != "":
-		fmt.Fprintf(out, "aws:     %s\n", res.Effective)
+		p("aws:     %s\n", res.Effective)
 	}
 
 	if root.TFVersion != "" {
-		fmt.Fprintf(out, "tf:      %s\n", root.TFVersion)
+		p("tf:      %s\n", root.TFVersion)
 	}
-	fmt.Fprintln(out)
+	p("\n")
 }
 
 // RecordAction records a completed terraform action to local swoop state.

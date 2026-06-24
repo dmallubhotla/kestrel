@@ -98,7 +98,24 @@ The homelab is the atypical consumer of kest (non-AWS providers, LAN-only, non-E
 
 These two are the concrete CI-ergonomics gaps the [ci.md](ci.md) examples work around today.
 
-## Deploy routines (helm + manifests)
+## Deploy routines (helm + manifests) — DONE
 
-The current helm path is OCI-chart + values-files + `aws eks update-kubeconfig` — EKS-shaped. Real non-EKS usage (proxmox-homelab: terraform-managed helm + raw `kubectl apply` app manifests on Talos) fits none of it. Design exploration of the candidate shapes — cluster-agnostic helm, a manifest-apply primitive, and a shared deploy spine with a pluggable executor — is written up in [deploy-routines.md](deploy-routines.md). Not yet scoped; helm-side work was deferred pending that discussion.
+Shipped as `kest deploy` / `kestci deploy`: a cluster-agnostic app-deploy spine
+(`internal/deploy`) with a pluggable executor (helm chart or raw manifests,
+chosen per `deploys:` entry), shared target resolution, guard stack, and
+ambient-vs-profile policy. Supports local in-repo charts, third-party/OCI charts,
+and `kubectl apply -f` manifest dirs; `--diff` is the plan analog. Targets gained
+an optional explicit `kubeconfig`, and cluster names resolve to named contexts
+(Talos `admin@homelab`) without an EKS ARN. Design + rationale:
+[deploy-routines.md](deploy-routines.md); user guide: [deploy.md](deploy.md);
+example: [examples/deploy/](../examples/deploy/).
+
+Deliberately left for later:
+- **Helm `release` onto the same spine.** The EKS `kest release` path (single OCI
+  chart, `image.tag` resolution, env-layered values) still forks its own
+  local/CI implementations; folding it into `internal/deploy` as a third executor
+  would retire that fork, the way the terraform spine retired swoop/kestci's.
+- **`kestci deploy` for EKS manifests** would want an `aws eks update-kubeconfig`
+  step (today: supply `KUBECONFIG` or a target `kubeconfig:`).
+- **`kustomize` executor** (`kubectl apply -k`) if a repo ever needs it.
 

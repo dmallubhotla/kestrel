@@ -2,9 +2,9 @@
 default:
     just --list
 
-# build the kest binary via nix
+# build the kest and kestci binaries via nix
 build:
-    nix build
+    nix build .#default .#kestci
 
 # build the docker image (linux only) as a docker-archive at ./result-docker
 docker-build:

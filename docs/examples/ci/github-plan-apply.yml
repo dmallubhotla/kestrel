@@ -11,22 +11,18 @@
 #     the authority boundary — kestci does not gate branches itself.
 #   - Provider tokens as repo/environment secrets.
 name: terraform
-
 on:
   pull_request:
     paths: ["iac-live/**"]
   push:
     branches: [master]
     paths: ["iac-live/**"]
-
 permissions:
-  id-token: write   # mint the OIDC token for AWS
+  id-token: write # mint the OIDC token for AWS
   contents: read
-
 env:
   # Provider credentials (not AWS — those come from OIDC below).
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
 jobs:
   plan:
     if: github.event_name == 'pull_request'
@@ -51,7 +47,6 @@ jobs:
       # Credentials are ambient (OIDC); kestci echoes the expected account/role.
       - run: kestci init "${{ matrix.root }}"
       - run: kestci plan "${{ matrix.root }}"
-
   apply:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

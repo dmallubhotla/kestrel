@@ -1,0 +1,5 @@
+# Per-app values for the shared charts/app chart.
+name: homepage
+image: ghcr.io/gethomepage/homepage:latest
+replicas: 1
+port: 3000

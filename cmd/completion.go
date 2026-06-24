@@ -21,6 +21,14 @@ func completeReleaseNames(_ *cobra.Command, _ []string, _ string) ([]string, cob
 	return cfg.ReleaseNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeDeployNames returns configured deploy keys for shell completion.
+func completeDeployNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if cfg == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return cfg.DeployNames(), cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeSwoopRoots returns discovered terraform root paths for shell completion.
 func completeSwoopRoots(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	if len(args) > 0 {

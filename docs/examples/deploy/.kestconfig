@@ -1,0 +1,32 @@
+# Example .kestconfig for kest deploy (terraform + helm + manifests).
+# Pairs with a global config that holds kube contexts / AWS accounts.
+
+deploys:
+  # Homemade app as a release of the shared in-repo chart.
+  homepage:
+    chart: charts/app
+    values: [deploys/homepage.yaml]
+    namespace: homepage
+    target: homelab
+
+  # Third-party chart straight from a repo.
+  authentik:
+    chart: authentik/authentik
+    repo: https://charts.goauthentik.io
+    version: "2024.10.1"
+    values: [deploys/authentik.yaml]
+    target: homelab
+
+  # Raw manifests, applied in NN- order like `kubectl apply -f dir/`.
+  hello:
+    manifests: k8s-manifests/hello
+    target: homelab
+
+targets:
+  homelab:
+    # A named kube context (Talos/kind/k3s) — resolved via the global
+    # kubernetes.contexts, or used literally if unmapped.
+    cluster: admin@homelab
+    # Optional explicit kubeconfig (e.g. a terraform output), project-relative.
+    # Drop this to use the ambient ~/.kube/config / $KUBECONFIG instead.
+    kubeconfig: iac-live/talos-config/kubeconfig
