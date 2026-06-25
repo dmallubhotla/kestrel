@@ -13,12 +13,12 @@ func completeTargetNames(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 	return cfg.TargetNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeReleaseNames returns configured helm release keys for shell completion.
-func completeReleaseNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+// completeDeployNames returns configured deploy keys for shell completion.
+func completeDeployNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	if cfg == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return cfg.ReleaseNames(), cobra.ShellCompDirectiveNoFileComp
+	return cfg.DeployNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeSwoopRoots returns discovered terraform root paths for shell completion.

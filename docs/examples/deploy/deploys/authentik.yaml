@@ -1,0 +1,8 @@
+# Values for the third-party authentik chart. Real secrets come from a
+# deploy_script / secret store, not from a committed values file.
+authentik:
+  error_reporting:
+    enabled: false
+server:
+  ingress:
+    enabled: false

@@ -7,7 +7,7 @@ It's particularly useful if you're deploying the same app to multiple EKS cluste
 
 ## What it does
 
-- **Helm deploys** with multi-release support, explicit values file layering, image tag resolution, and deploy scripts
+- **App deploys** — roll out helm charts or raw manifests to any resolved cluster, with explicit values file layering and deploy scripts
 - **Terraform orchestration** ("swoop") — discovers terraform roots in your repo, lets you pick them interactively or target them with globs, and tracks init/plan/apply state
 - **Profile management** — set a target once, and all subsequent commands use it (no more `-e dev` on every invocation)
 - **Safety guards** — CI-only enforcement, clean worktree checks, prod-only-from-main restrictions
@@ -130,37 +130,36 @@ You can generate the accounts/contexts automatically with `kest config autoconfi
 Goes in your project root (committed to git). Kest walks up from your current directory to find it, so it works from anywhere in your project tree.
 
 ```yaml
-# --- Helm ---
+# --- Helm (shared deploy settings) ---
 helm:
-  # OCI chart reference. Required for helm deploys.
-  # Example: oci://ghcr.io/myorg/mychart:1.0
-  chart: ""
-  # Directory containing values files (listed per release under values:).
-  # Example: misc/chart
-  values_dir: ""
-  # Kubernetes namespace.
-  namespace: app
-  # Scripts to run before each helm deploy (paths relative to project root).
-  # Can be overridden per release (set deploy_scripts: [] on a release to skip).
+  # Scripts to run before each deploy (paths relative to project root).
+  # Deploys inherit these; override per deploy (set deploy_scripts: [] to skip).
   # Example:
   #   deploy_scripts:
   #     - misc/chart/deploy-scripts/migrate.sh
   deploy_scripts: []
-  # Named helm releases. Each release targets exactly one entry in
-  # `targets:` below. Example:
-  #   releases:
-  #     other:
-  #       release_name: my-app-other   # passed to `helm upgrade`
-  #       target: dev                  # must match a key in targets:
-  #       values:                      # values files (relative to values_dir)
-  #         - dev.yaml
-  #         - dev-other.yaml
-  #     v1:
-  #       release_name: my-app-v1
-  #       target: local
-  #       values: [local.yaml]
-  #       deploy_scripts: []           # override top-level scripts; [] = skip
-  releases: {}
+
+# --- Deploys (apps: helm charts or raw manifests, cluster-agnostic) ---
+# The app-deploy map driving `kest deploy` / `kestci deploy`. Each entry sets
+# exactly one source — chart: (helm) or manifests: (kubectl); kest picks the
+# executor. Targets can be EKS or any named context. See docs/deploy.md.
+# Example:
+#   deploys:
+#     homepage:                       # local in-repo chart
+#       chart: charts/app
+#       values: [deploys/homepage.yaml]
+#       namespace: homepage
+#       target: homelab
+#     authentik:                      # third-party chart from a repo
+#       chart: authentik/authentik
+#       repo: https://charts.goauthentik.io
+#       version: "2024.10.1"
+#       values: [deploys/authentik.yaml]
+#       target: homelab
+#     gitea:                          # raw manifests (kubectl apply -f dir/)
+#       manifests: k8s-manifests/gitea
+#       target: homelab
+deploys: {}
 
 # --- Terraform ---
 terraform:
@@ -178,8 +177,8 @@ terraform:
   default_version: ""
 
 # --- Targets ---
-# Named deployment targets binding a cluster + AWS account + region. Helm
-# releases reference these by key; swoop also resolves through them. Example:
+# Named deployment targets binding a cluster + AWS account + region. Deploys
+# reference these by key; swoop also resolves through them. Example:
 #   targets:
 #     dev:
 #       cluster: eks-dev             # must resolve via kubernetes.contexts
@@ -187,6 +186,10 @@ terraform:
 #       region: us-east-1
 #     local:
 #       cluster: kind-local          # cluster-only targets are valid (no AWS)
+#     homelab:
+#       cluster: my-cluster          # a named context (kind/k3s/…), used as-is
+#       kubeconfig: iac-live/cluster/kubeconfig  # optional explicit kubeconfig
+#                                    # (project-relative) for `kest deploy`
 targets: {}
 
 # --- Directories (swoop only) ---
@@ -237,19 +240,28 @@ kest profile current      # show what's active
 eval "$(kest profile export)"
 ```
 
-### Helm
+### Deploy (apps: helm charts + raw manifests)
+
+`kest deploy` applies an app defined under `deploys:`, picking its executor
+automatically — a helm chart (`helm upgrade --install`) or a directory of raw
+manifests (`kubectl apply -f`):
 
 ```sh
-kest release deploy other                        # deploy a single release
-kest release deploy --all                        # deploy all releases
-kest release deploy --all --target dev           # deploy all dev releases
-kest release deploy other       --force          # bypass all safety guards
-kest release ls                                  # list configured releases
-kest release ls other                            # query helm for release status
-kest release uninstall other
+kest deploy gitea                    # kubectl apply -f k8s-manifests/gitea/
+kest deploy homepage                 # helm upgrade --install (local or third-party chart)
+kest deploy homepage --diff          # read-only preview (helm --dry-run / kubectl diff)
+kest deploy --all --target homelab   # all apps on a target
+kest deploy gitea -- --server-side   # pass extra args to kubectl/helm
 ```
 
-Helm deploys layer the release's values files in order, resolve image tags (git tag for prod, `branch-sha` for everything else), and run any configured deploy scripts.
+It shares target resolution and the guard stack with everything else, and is
+cluster-agnostic: a target's `cluster` is a named kube context (resolved via
+`kubernetes.contexts` or used literally — an EKS ARN or any other context),
+with an optional explicit `kubeconfig`. Helm deploys layer their values files in
+order and run any configured deploy scripts. In CI use `kestci deploy` (ambient
+credentials, guards always on). Full guide: [docs/deploy.md](docs/deploy.md);
+worked example combining terraform + helm + manifests:
+[examples/deploy/](examples/deploy/).
 
 ### Terraform
 
@@ -297,13 +309,13 @@ kest config accounts    # list account ID mappings
 
 ## How resolution works
 
-When you run `kest release deploy other`, here's what happens:
+When you run `kest deploy myapp`, here's what happens:
 
-1. Kest finds your `.kestconfig` and looks up the `other` release → gets target `dev`
+1. Kest finds your `.kestconfig` and looks up the `myapp` deploy → gets target `dev`
 2. Looks up the `dev` target → gets cluster name `eks-dev`, account `111122223333`
 3. Looks up `eks-dev` in your global config's contexts → gets the full EKS ARN
 4. Looks up that account ID in your global config's accounts → gets `aws_profile: dev-sso`
-5. Runs helm with the release's values files, the right kube context, and AWS_PROFILE set
+5. Runs helm/kubectl with the deploy's values files, the right kube context, and AWS_PROFILE set
 
 For swoop, resolution works through directory→account ID mappings instead, but the account→profile lookup is the same.
 
@@ -332,7 +344,7 @@ cmd/           CLI layer (Cobra commands)
 internal/
   config/      Two-layer config loading and target resolution
   profile/     Active profile persistence
-  helm/        Helm deploy command construction
+  deploy/      App deploy spine (helm chart / kubectl manifest executors)
   terraform/   Terraform command proxying
   guard/       Deploy safety checks
   runner/      External command execution

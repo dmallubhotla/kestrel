@@ -22,7 +22,7 @@ Notes:
 
 ## `swoop list` AWS column should reflect what apply actually uses
 
-`printRootTable` (`cmd/swoop.go:233`) fills the AWS column from `resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)` alone. That returns empty unless the root has an `allowed_account_ids`-style marker, a `directories` mapping, or an active `-e` target — so for repos whose only AWS touchpoint is an S3 backend with `assume_role` (e.g. proxmox-homelab, account `677425296084` → `homelab`), every root shows `-`.
+`printRootTable` (`cmd/swoop.go:233`) fills the AWS column from `resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)` alone. That returns empty unless the root has an `allowed_account_ids`-style marker, a `directories` mapping, or an active `-e` target — so for repos whose only AWS touchpoint is an S3 backend with `assume_role` (e.g. the homelab repo, account `111122223333` → `homelab`), every root shows `-`.
 
 But the *executor* resolves more: `cmd/swoop_actions.go` adds a `backendProfileFor` fallback (`swoop.ExtractBackendAuth`, reading the backend `role_arn`) at lines ~216/229. So `kest swoop apply` runs with `AWS_PROFILE=homelab` while `kest swoop list` claims `-`. The list lies about what apply does.
 
@@ -93,4 +93,26 @@ The homelab is the atypical consumer of kest (non-AWS providers, LAN-only, non-E
 **Still open:**
 - **Plan surfacing:** `PlanSummary` is recorded to local state, which is ephemeral on a runner. PR-comment / plan-artifact workflows need plan output emitted to stdout/file, not just state.
 - **Self-hosted runners** are on the table (homelab LAN, or work-specific networks). A first step can be `kestci` commands wrapped in a `justfile` before any GitHub Actions wiring — the binary should be pleasant to drive that way too.
+- **`--changed` on kestci.** `kest swoop` scopes to roots a branch touched; `kestci` can't, so CI workflows fan out an explicit matrix instead (see [ci.md](ci.md) / [examples/ci/](examples/ci/)). Porting `--changed` (and `--dir`) onto kestci would let `kestci plan --changed` gate PRs directly.
+- **Terraform-flag passthrough.** kestci `init|plan|apply` take exactly one target and forward nothing, so CI can't pass `-detailed-exitcode` (drift detection parses "No changes" out of plan output instead), `-lock-timeout`, `-var`, etc. A trailing `-- <args>` passthrough would fix the drift-exit-code case cleanly.
+
+These two are the concrete CI-ergonomics gaps the [ci.md](ci.md) examples work around today.
+
+## Deploy routines (helm + manifests) — DONE
+
+Shipped as `kest deploy` / `kestci deploy`: a cluster-agnostic app-deploy spine
+(`internal/deploy`) with a pluggable executor (helm chart or raw manifests,
+chosen per `deploys:` entry), shared target resolution, guard stack, and
+ambient-vs-profile policy. Supports local in-repo charts, third-party/OCI charts,
+and `kubectl apply -f` manifest dirs; `--diff` is the plan analog. Targets gained
+an optional explicit `kubeconfig`, and cluster names resolve to named contexts
+(a bare named context like `my-cluster`) without an EKS ARN. Design + rationale:
+[deploy-routines.md](deploy-routines.md); user guide: [deploy.md](deploy.md);
+example: [examples/deploy/](../examples/deploy/).
+
+Deliberately left for later:
+- **`kestci deploy` for EKS manifests** would want a step that writes a
+  kubeconfig for the cluster before deploy (today: supply `KUBECONFIG` or a
+  target `kubeconfig:`).
+- **`kustomize` executor** (`kubectl apply -k`) if a repo ever needs it.
 

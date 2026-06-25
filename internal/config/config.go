@@ -24,6 +24,11 @@ type Config struct {
 	// Used for centralized IaC repos where auto-discovery might miss some dirs.
 	Directories map[string]string `yaml:"directories,omitempty"`
 
+	// Deploys are named app deploys (project config). Each deploys one app to a
+	// target via a helm chart or a directory of raw manifests; the executor is
+	// inferred from which source is set. See internal/deploy.
+	Deploys map[string]Deploy `yaml:"deploys,omitempty"`
+
 	// Raw layers preserved for source-aware commands (not serialised).
 	ProjectTargets map[string]TargetConfig `yaml:"-"`
 	Sources        Sources                 `yaml:"-"`
@@ -34,6 +39,81 @@ type TargetConfig struct {
 	Cluster    string `yaml:"cluster,omitempty"`
 	AWSAccount string `yaml:"aws_account,omitempty"` // 12-digit AWS account ID
 	Region     string `yaml:"region,omitempty"`      // AWS region (e.g. us-east-1)
+
+	// Kubeconfig is an optional explicit kubeconfig file (path relative to the
+	// project root), e.g. one written by a terraform output. Empty uses the
+	// ambient kubeconfig ($KUBECONFIG / ~/.kube/config).
+	Kubeconfig string `yaml:"kubeconfig,omitempty"`
+}
+
+// Deploy defines a single named app deploy. Exactly one source must be set:
+// Chart (helm executor) or Manifests (kubectl executor); see Kind.
+type Deploy struct {
+	// --- helm source (Chart set) ---
+	// Chart is a helm chart: a local path (charts/app), an OCI ref
+	// (oci://ghcr.io/org/chart), or — with Repo — a chart name in a repo.
+	Chart string `yaml:"chart,omitempty"`
+	// Repo is a helm chart repository URL (passed as --repo). Optional; used
+	// with a bare chart name for third-party charts not referenced by OCI.
+	Repo string `yaml:"repo,omitempty"`
+	// Version pins the chart version (--version). Optional.
+	Version string `yaml:"version,omitempty"`
+	// ReleaseName overrides the helm release name. Empty defaults to the
+	// deploy's key in the deploys map.
+	ReleaseName string `yaml:"release_name,omitempty"`
+	// Set holds inline --set key=value overrides. Optional.
+	Set map[string]string `yaml:"set,omitempty"`
+
+	// --- manifest source (Manifests set) ---
+	// Manifests is a directory or file applied with `kubectl apply -f`.
+	Manifests string `yaml:"manifests,omitempty"`
+
+	// --- common ---
+	// Target is the deployment target (key in targets:). Required.
+	Target string `yaml:"target"`
+	// Namespace overrides the namespace (helm --namespace / kubectl
+	// --namespace). Empty lets the chart/manifests carry their own.
+	Namespace string `yaml:"namespace,omitempty"`
+	// Values lists helm values files (paths relative to the project root),
+	// layered in order. Helm-only.
+	Values []string `yaml:"values,omitempty"`
+	// DeployScripts overrides the top-level helm.deploy_scripts for this
+	// deploy. nil = inherit; [] = skip.
+	DeployScripts *[]string `yaml:"deploy_scripts,omitempty"`
+}
+
+// Deploy executor kinds.
+const (
+	DeployHelm     = "helm"
+	DeployManifest = "manifest"
+)
+
+// Kind reports which executor a deploy uses: DeployHelm when Chart is set,
+// DeployManifest when Manifests is set, or "" when the deploy is invalid
+// (neither or both sources set). Validate surfaces the invalid case.
+func (d Deploy) Kind() string {
+	switch {
+	case d.Chart != "" && d.Manifests == "":
+		return DeployHelm
+	case d.Manifests != "" && d.Chart == "":
+		return DeployManifest
+	default:
+		return ""
+	}
+}
+
+// Validate returns an error if the deploy is not exactly one of helm/manifest
+// or is missing a target. name is the deploy's key, for the message.
+func (d Deploy) Validate(name string) error {
+	switch {
+	case d.Chart == "" && d.Manifests == "":
+		return fmt.Errorf("deploy %q: set either chart: (helm) or manifests: (kubectl)", name)
+	case d.Chart != "" && d.Manifests != "":
+		return fmt.Errorf("deploy %q: set only one of chart: or manifests:, not both", name)
+	case d.Target == "":
+		return fmt.Errorf("deploy %q: target is required", name)
+	}
+	return nil
 }
 
 // AWSConfig holds AWS-specific user configuration.
@@ -63,21 +143,11 @@ type Sources struct {
 	Project string // project-level .kestconfig (may be empty if not found)
 }
 
+// HelmConfig holds helm settings shared across deploys.
 type HelmConfig struct {
-	Chart         string                 `yaml:"chart,omitempty"`
-	ValuesDir     string                 `yaml:"values_dir,omitempty"`
-	Namespace     string                 `yaml:"namespace,omitempty"`
-	DeployScripts []string               `yaml:"deploy_scripts,omitempty"`
-	Releases      map[string]HelmRelease `yaml:"releases,omitempty"`
-}
-
-// HelmRelease defines an individual helm release within the project.
-// Multiple releases can target the same cluster with different values.
-type HelmRelease struct {
-	ReleaseName   string    `yaml:"release_name"`
-	Target        string    `yaml:"target"`
-	Values        []string  `yaml:"values,omitempty"`
-	DeployScripts *[]string `yaml:"deploy_scripts,omitempty"` // nil = inherit from HelmConfig, [] = skip
+	// DeployScripts run before a deploy; deploys inherit these unless they set
+	// their own deploy_scripts.
+	DeployScripts []string `yaml:"deploy_scripts,omitempty"`
 }
 
 type TerraformConfig struct {
@@ -181,11 +251,6 @@ func Load() (*Config, error) {
 		out.Sources.Project = projectPath
 	}
 
-	// Apply defaults
-	if out.Helm.Namespace == "" {
-		out.Helm.Namespace = "app"
-	}
-
 	return out, nil
 }
 
@@ -239,21 +304,9 @@ func fileExists(path string) bool {
 func compose(user, project *Config) *Config {
 	out := *user
 
-	// Helm: project overrides non-empty fields
-	if project.Helm.Chart != "" {
-		out.Helm.Chart = project.Helm.Chart
-	}
-	if project.Helm.ValuesDir != "" {
-		out.Helm.ValuesDir = project.Helm.ValuesDir
-	}
+	// Helm deploy scripts come from project config.
 	if len(project.Helm.DeployScripts) > 0 {
 		out.Helm.DeployScripts = project.Helm.DeployScripts
-	}
-	if project.Helm.Namespace != "" {
-		out.Helm.Namespace = project.Helm.Namespace
-	}
-	if len(project.Helm.Releases) > 0 {
-		out.Helm.Releases = project.Helm.Releases
 	}
 
 	// Terraform: IACDir comes from project; behaviour flags come from user
@@ -280,6 +333,11 @@ func compose(user, project *Config) *Config {
 	// Directories come from project config.
 	if len(project.Directories) > 0 {
 		out.Directories = project.Directories
+	}
+
+	// Deploys come from project config.
+	if len(project.Deploys) > 0 {
+		out.Deploys = project.Deploys
 	}
 
 	// AWS and Kubernetes come from user config (already in out via *user).
@@ -389,20 +447,20 @@ func (c *Config) TargetNames() []string {
 	return sortedKeys(c.Targets)
 }
 
-// ReleaseNames returns a sorted list of helm release keys.
-func (c *Config) ReleaseNames() []string {
-	return sortedKeys(c.Helm.Releases)
+// DeployNames returns a sorted list of deploy keys.
+func (c *Config) DeployNames() []string {
+	return sortedKeys(c.Deploys)
 }
 
-// ReleasesForTarget returns release keys that target the given target name.
-func (c *Config) ReleasesForTarget(target string) []string {
+// DeploysForTarget returns deploy keys that target the given target name,
+// sorted.
+func (c *Config) DeploysForTarget(target string) []string {
 	var names []string
-	for k, r := range c.Helm.Releases {
-		if r.Target == target {
+	for k, d := range c.Deploys {
+		if d.Target == target {
 			names = append(names, k)
 		}
 	}
-	// Sort for deterministic ordering.
 	for i := 1; i < len(names); i++ {
 		for j := i; j > 0 && names[j] < names[j-1]; j-- {
 			names[j], names[j-1] = names[j-1], names[j]
@@ -411,12 +469,12 @@ func (c *Config) ReleasesForTarget(target string) []string {
 	return names
 }
 
-// EffectiveDeployScripts returns the deploy scripts for a release,
-// falling back to the top-level HelmConfig scripts when the release
-// does not override them.
-func (c *Config) EffectiveDeployScripts(release HelmRelease) []string {
-	if release.DeployScripts != nil {
-		return *release.DeployScripts
+// EffectiveDeployScriptsForDeploy returns the deploy scripts for a deploy,
+// falling back to the top-level HelmConfig scripts when the deploy does not
+// override them (nil = inherit, [] = skip).
+func (c *Config) EffectiveDeployScriptsForDeploy(d Deploy) []string {
+	if d.DeployScripts != nil {
+		return *d.DeployScripts
 	}
 	return c.Helm.DeployScripts
 }

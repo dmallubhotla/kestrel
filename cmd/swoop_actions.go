@@ -9,7 +9,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/dmallubhotla/kestrel/internal/guard"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
 	"github.com/dmallubhotla/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
@@ -211,23 +210,16 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 		}
 	}
 
-	// Resolve AWS_PROFILE.
-	awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
-	backendProfile := backendProfileFor(root, awsProfile)
+	// Resolve credentials (provider + S3-backend fallback), shared with kestci.
+	res := swoop.EffectiveProfiles(cfg, root, environment)
 
-	if err := ensureSSOSession(awsProfile); err != nil {
+	if err := ensureSSOSession(res.ProviderProfile); err != nil {
 		return err
 	}
-	if backendProfile != "" {
-		if err := ensureSSOSession(backendProfile); err != nil {
+	if res.BackendProfile != "" {
+		if err := ensureSSOSession(res.BackendProfile); err != nil {
 			return err
 		}
-	}
-
-	// Fallback: when there are no provider blocks (apply profile didn't
-	// resolve), use the backend profile as the source credentials.
-	if awsProfile == "" && backendProfile != "" {
-		awsProfile = backendProfile
 	}
 
 	tfCommand := cfg.TerraformCommand()
@@ -254,27 +246,11 @@ func executeSingle(action string, root swoop.Root, baseDir string) error {
 		"action", action,
 		"root", root.Path,
 		"dir", root.Dir,
-		"aws_profile", awsProfile,
+		"aws_profile", res.Effective,
 		"tf_version", root.TFVersion,
 	)
 
-	// Print context.
-	fmt.Fprintf(os.Stderr, "root:    %s\n", root.Path)
-	fmt.Fprintf(os.Stderr, "dir:     %s\n", root.Dir)
-	if awsProfile != "" {
-		fmt.Fprintf(os.Stderr, "aws:     %s\n", awsProfile)
-	}
-	if root.TFVersion != "" {
-		fmt.Fprintf(os.Stderr, "tf:      %s\n", root.TFVersion)
-	}
-	fmt.Fprintln(os.Stderr)
-
-	// Execute.
-	result, err := swoop.RunTerraform(tfCommand, root, awsProfile, action)
-
-	// Record to local state regardless of error.
-	recordAction(baseDir, root.Path, action, result)
-
+	result, err := swoop.Execute(cfg, root, baseDir, action, res, swoop.Policy{PrintContext: true})
 	if err != nil {
 		slog.Warn("terraform action failed", "action", action, "root", root.Path, "err", err)
 		return fmt.Errorf("terraform %s failed: %w", action, err)
@@ -372,18 +348,14 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	// derived from the root's `backend "s3"` block.
 	checkedProfiles := map[string]bool{}
 	for _, root := range roots {
-		p := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
-		if p != "" && !checkedProfiles[p] {
-			if err := ensureSSOSession(p); err != nil {
-				return err
+		res := swoop.EffectiveProfiles(cfg, root, environment)
+		for _, p := range []string{res.ProviderProfile, res.BackendProfile} {
+			if p != "" && !checkedProfiles[p] {
+				if err := ensureSSOSession(p); err != nil {
+					return err
+				}
+				checkedProfiles[p] = true
 			}
-			checkedProfiles[p] = true
-		}
-		if bp := backendProfileFor(root, p); bp != "" && !checkedProfiles[bp] {
-			if err := ensureSSOSession(bp); err != nil {
-				return err
-			}
-			checkedProfiles[bp] = true
 		}
 	}
 
@@ -392,12 +364,7 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 	results := make([]batchResult, len(roots))
 
 	for i, root := range roots {
-		awsProfile := resolve.AWSProfileForRoot(cfg, root.Dir, root.AccountID, environment)
-		if awsProfile == "" {
-			if bp := backendProfileFor(root, awsProfile); bp != "" {
-				awsProfile = bp
-			}
-		}
+		res := swoop.EffectiveProfiles(cfg, root, environment)
 
 		// Print header.
 		fmt.Fprintf(os.Stderr, "━━━ [%d/%d] %s ━━━\n", i+1, len(roots), root.Path)
@@ -427,10 +394,9 @@ func runSwoopBatch(action string, roots []swoop.Root, baseDir string) error {
 		slog.Info("swoop batch action",
 			"action", action,
 			"root", root.Path,
-			"aws_profile", awsProfile,
+			"aws_profile", res.Effective,
 		)
-		execResult, err := swoop.RunTerraform(tfCommand, root, awsProfile, action)
-		recordAction(baseDir, root.Path, action, execResult)
+		execResult, err := swoop.Execute(cfg, root, baseDir, action, res, swoop.Policy{})
 
 		br := batchResult{root: root, err: err}
 		if execResult != nil {
@@ -516,50 +482,6 @@ func ambiguousTargetError(matches []swoop.Root, target string) error {
 		msg += fmt.Sprintf("  %s\n", m.Path)
 	}
 	return fmt.Errorf("%s", msg)
-}
-
-// backendProfileFor returns the extra AWS profile needed for a root's S3
-// backend, when it differs from applyProfile. Returns "" when the backend
-// block has no profile/role_arn, when resolution fails, or when the
-// resolved profile matches applyProfile.
-func backendProfileFor(root swoop.Root, applyProfile string) string {
-	if cfg == nil {
-		return ""
-	}
-	auth := swoop.ExtractBackendAuth(root.AbsPath)
-	var p string
-	switch {
-	case auth.Profile != "":
-		p = auth.Profile
-	case auth.AccountID != "":
-		p = cfg.ResolveAccountProfile(auth.AccountID)
-	}
-	if p == "" || p == applyProfile {
-		return ""
-	}
-	return p
-}
-
-func recordAction(baseDir, rootPath, action string, result *swoop.ExecResult) {
-	state, err := swoop.LoadState(baseDir)
-	if err != nil {
-		return
-	}
-
-	switch action {
-	case "init":
-		state.RecordInit(rootPath)
-	case "plan":
-		summary := ""
-		if result != nil {
-			summary = result.PlanSummary
-		}
-		state.RecordPlan(rootPath, summary)
-	case "apply":
-		state.RecordApply(rootPath)
-	}
-
-	_ = state.Save()
 }
 
 var swoopEditCmd = &cobra.Command{

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/dmallubhotla/kestrel/internal/config"
@@ -18,13 +19,13 @@ var swoopSetupForce bool
 var swoopSetupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Discover terraform roots and initialize project .kestconfig",
-	Long: `Walks the project to discover terraform roots, detects the IaC layout
-(service-embedded or centralized), and writes infrastructure facts to .kestconfig.
+	Long: `Walks the project and writes infrastructure facts to .kestconfig:
 
-For service repos (misc/iac/live/{env}/ pattern), sets terraform.iac_dir
-and creates target entries for each env directory found.
-
-For centralized IaC repos, creates directory→account mappings.
+  - terraform.iac_dir   the directory containing the terraform roots
+  - terraform.command   tofu, when roots pin via .opentofu-version
+  - directories         dir → AWS account, for dirs that map to one account
+  - targets             one per env, when the …/live/<env>/ convention is used
+  - deploys             helm charts and manifest dirs found in the repo
 
 Use --force to overwrite existing mappings.`,
 	RunE: runSwoopSetup,
@@ -50,16 +51,24 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no terraform roots found under %s", projectRoot)
 	}
 
-	// Step 2: Detect layout.
+	// Step 2: find iac_dir. layout.IACDir is set only for the …/live/<env>/
+	// convention, where downstream joins iac_dir/live/<target>; otherwise it's
+	// the roots' common ancestor.
 	layout := swoop.DetectLayout(roots)
+	iacDir := layout.IACDir
+	if iacDir == "" {
+		iacDir = commonRootDir(roots)
+	}
 
 	fmt.Printf("Found %d terraform root(s)\n", len(roots))
-	if layout.Type == "service" {
-		fmt.Printf("Detected: service-embedded IaC (iac_dir: %s)\n", layout.IACDir)
+	if iacDir != "" {
+		fmt.Printf("terraform.iac_dir: %s\n", iacDir)
 	} else {
-		fmt.Println("Detected: centralized IaC layout")
+		fmt.Println("terraform.iac_dir: (repo root)")
 	}
-	fmt.Printf("Directories: %s\n", strings.Join(layout.EnvNames, ", "))
+	if layout.Type == "service" {
+		fmt.Printf("Env targets (live/<env>): %s\n", strings.Join(layout.EnvNames, ", "))
+	}
 
 	// Step 3: Inspect roots for account IDs.
 	dirInfos := swoop.InspectDirs(roots, projectRoot)
@@ -92,39 +101,58 @@ func runSwoopSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Collect account IDs across all top-level dirs (for centralized repos).
-	allAccountIDs := make(map[string]string) // dir name → first account ID
-	for _, p := range dirInfos {
-		if len(p.AccountIDs) > 0 {
-			allAccountIDs[p.Name] = p.AccountIDs[0]
-		}
-	}
-
 	// Step 4: Build proposed config.
 	proposed := &config.Config{}
+	proposed.Terraform.IACDir = iacDir
 
+	// Seed a target per env under the …/live/<env>/ convention.
 	if layout.Type == "service" {
-		proposed.Terraform = config.TerraformConfig{IACDir: layout.IACDir}
-
-		// Service repos: create targets with aws_account and region.
 		proposed.Targets = make(map[string]config.TargetConfig)
 		for _, envName := range layout.EnvNames {
-			tc := config.TargetConfig{
+			proposed.Targets[envName] = config.TargetConfig{
 				AWSAccount: rootAccountIDs[envName],
 				Region:     rootRegions[envName],
 			}
-			proposed.Targets[envName] = tc
 		}
+	}
 
-		// Detect helm values files.
-		if helmCfg := detectHelmValues(projectRoot, layout.EnvNames); helmCfg != nil {
-			proposed.Helm = *helmCfg
+	// dir → account, only where unambiguous: a multi-account dir would override
+	// per-root resolution (AWSProfileForRoot checks Directories first).
+	dirs := make(map[string]string)
+	for _, p := range dirInfos {
+		if len(p.AccountIDs) == 1 {
+			dirs[p.Name] = p.AccountIDs[0]
 		}
-	} else {
-		// Centralized repos: create directory→account mappings.
-		proposed.Directories = make(map[string]string)
-		for dirName, accountID := range allAccountIDs {
-			proposed.Directories[dirName] = accountID
+	}
+	if len(dirs) > 0 {
+		proposed.Directories = dirs
+	}
+
+	targetHint := mapKeys(proposed.Targets)
+	if len(targetHint) == 0 && cfg != nil {
+		targetHint = cfg.TargetNames()
+	}
+	if deploys := detectDeploys(projectRoot, targetHint); len(deploys) > 0 {
+		proposed.Deploys = deploys
+	}
+
+	if usesOpenTofu(roots) {
+		proposed.Terraform.Command = "tofu"
+		fmt.Println("Detected: OpenTofu (.opentofu-version) → terraform.command: tofu")
+	}
+
+	if cfg != nil && len(proposed.Targets) == 0 && deploysNeedTarget(proposed.Deploys) {
+		if len(cfg.Kubernetes.Contexts) > 0 {
+			picked, err := promptDeployTargets()
+			if err != nil {
+				return err
+			}
+			if len(picked) > 0 {
+				proposed.Targets = picked
+			}
+		} else {
+			fmt.Println("\nDetected deploys but no kube contexts are configured.")
+			fmt.Println("Run 'kest config autoconfigure' to register contexts, then add a target.")
 		}
 	}
 
@@ -258,136 +286,309 @@ func editConfigInEditor(c *config.Config) (*config.Config, error) {
 	return &result, nil
 }
 
-// detectHelmValues scans common locations for helm values files and infers
-// releases from the naming convention:
-//
-//	shared.yaml                — base layer (auto-included by helm.Deploy)
-//	<target>.yaml              — target-level values
-//	<target>-<instance>.yaml   — release-specific values
-//
-// For targets that have no instance-specific files, a release is created
-// with the target name itself. Values lists are explicit — if a target-level
-// file exists, it's included in the release's values list.
-//
-// The targetNames parameter provides known target names (from terraform
-// layout detection) to disambiguate target-level vs release files.
-func detectHelmValues(projectRoot string, targetNames []string) *config.HelmConfig {
-	candidates := []string{"misc/chart", "chart", "deploy/chart", "helm"}
+// detectDeploys proposes deploys: entries for the project — helm-chart deploys
+// inferred from a values directory and manifest deploys from directories of raw
+// kubernetes YAML. Detection is best-effort; the user reviews and edits the
+// proposal before it's written. Returns nil when nothing is found.
+func detectDeploys(projectRoot string, targetNames []string) map[string]config.Deploy {
+	deploys := detectChartDeploys(projectRoot, targetNames)
 
-	for _, dir := range candidates {
-		path := filepath.Join(projectRoot, dir)
-		entries, err := os.ReadDir(path)
+	defaultTarget := ""
+	if len(targetNames) == 1 {
+		defaultTarget = targetNames[0]
+	}
+	for name, d := range detectManifestDeploys(projectRoot, defaultTarget) {
+		if _, exists := deploys[name]; !exists {
+			deploys[name] = d
+		}
+	}
+
+	if len(deploys) == 0 {
+		return nil
+	}
+	return deploys
+}
+
+// Directories detectDeploys scans, relative to the project root: chart
+// directories (hold a Chart.yaml), values directories (hold env/instance value
+// files), and manifest directories (hold raw kubernetes YAML).
+var (
+	chartCandidates    = []string{"charts/app", "charts", "chart", "misc/chart", "deploy/chart", "helm"}
+	valuesCandidates   = []string{"deploys", "values", "charts", "misc/chart", "chart", "deploy/chart", "helm"}
+	manifestCandidates = []string{"k8s-manifests", "k8s", "manifests", "kubernetes"}
+)
+
+// structuralChartFiles are value-dir entries that belong to the chart itself,
+// not to a target or instance.
+var structuralChartFiles = map[string]bool{"shared": true, "Chart": true, "values": true}
+
+// detectChartDeploys infers helm-chart deploys from a values directory whose
+// files follow the convention:
+//
+//	<target>.yaml              — target-level values
+//	<target>-<instance>.yaml   — instance-specific values
+//
+// Each instance and each bare target-level file becomes one deploy. A file
+// matching no known target stands alone, targeting the sole configured target
+// when there is exactly one, else its own name. chart: is set to a detected
+// local chart path when one exists, else left blank for the user to fill.
+func detectChartDeploys(projectRoot string, targetNames []string) map[string]config.Deploy {
+	deploys := make(map[string]config.Deploy)
+	chart := detectLocalChart(projectRoot)
+
+	defaultTarget := ""
+	if len(targetNames) == 1 {
+		defaultTarget = targetNames[0]
+	}
+
+	for _, dir := range valuesCandidates {
+		entries, err := os.ReadDir(filepath.Join(projectRoot, dir))
 		if err != nil {
 			continue
 		}
 
-		// Collect yaml files (excluding shared.yaml).
 		var yamlFiles []string
-		hasShared := false
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 				continue
 			}
-			name := strings.TrimSuffix(e.Name(), ".yaml")
-			if name == "shared" {
-				hasShared = true
-				continue
+			if name := strings.TrimSuffix(e.Name(), ".yaml"); !structuralChartFiles[name] {
+				yamlFiles = append(yamlFiles, name)
 			}
-			yamlFiles = append(yamlFiles, name)
 		}
-
-		if !hasShared && len(yamlFiles) == 0 {
+		if len(yamlFiles) == 0 {
 			continue
 		}
 
-		helmCfg := &config.HelmConfig{
-			ValuesDir: dir,
-			Releases:  make(map[string]config.HelmRelease),
-		}
-
-		// Build a set of known targets for prefix matching.
 		targetSet := make(map[string]bool, len(targetNames))
 		for _, t := range targetNames {
 			targetSet[t] = true
 		}
 
-		// Classify each yaml file.
-		// Pass 1: identify target-level files (exact match to a target name).
-		targetFiles := make(map[string]bool) // target name → has a <target>.yaml
+		// Files matching a target name exactly are target-level value layers.
+		targetFiles := make(map[string]bool)
 		for _, name := range yamlFiles {
 			if targetSet[name] {
 				targetFiles[name] = true
 			}
 		}
 
-		// Pass 2: identify release files (<target>-<instance>.yaml).
-		targetsWithInstances := make(map[string]bool) // targets that have instance files
+		valuesPath := func(file string) string { return filepath.Join(dir, file+".yaml") }
+		targetsWithInstances := make(map[string]bool)
+
 		for _, name := range yamlFiles {
 			if targetFiles[name] {
-				continue // this is a target-level file, not a release
+				continue
 			}
-			// Try to match <target>-<instance> pattern.
 			matched := false
 			for _, t := range targetNames {
-				prefix := t + "-"
-				if strings.HasPrefix(name, prefix) {
-					instance := name[len(prefix):]
-					if instance == "" {
-						continue
-					}
-					targetsWithInstances[t] = true
-					var values []string
-					if targetFiles[t] {
-						values = append(values, t+".yaml")
-					}
-					values = append(values, name+".yaml")
-					helmCfg.Releases[instance] = config.HelmRelease{
-						ReleaseName: "RELEASE-NAME-" + instance,
-						Target:      t,
-						Values:      values,
-					}
-					matched = true
-					break
+				instance, ok := strings.CutPrefix(name, t+"-")
+				if !ok || instance == "" {
+					continue
 				}
+				targetsWithInstances[t] = true
+				var values []string
+				if targetFiles[t] {
+					values = append(values, valuesPath(t))
+				}
+				values = append(values, valuesPath(name))
+				deploys[instance] = config.Deploy{Chart: chart, Target: t, Values: values}
+				matched = true
+				break
 			}
-			if !matched {
-				// Unmatched file — could be a standalone release or unknown target.
-				// If it's not a known target name, treat it as a single-file release
-				// targeting itself (the user can fix the target in editor).
-				if !targetSet[name] {
-					helmCfg.Releases[name] = config.HelmRelease{
-						ReleaseName: "RELEASE-NAME-" + name,
-						Target:      name,
-						Values:      []string{name + ".yaml"},
-					}
+			// A file matching no known target stands alone.
+			if !matched && !targetSet[name] {
+				target := name
+				if defaultTarget != "" {
+					target = defaultTarget
 				}
+				deploys[name] = config.Deploy{Chart: chart, Target: target, Values: []string{valuesPath(name)}}
 			}
 		}
 
-		// Pass 3: for targets that have NO instance files and DO have a
-		// target-level yaml, create a single release named after the target.
+		// Targets with only a bare <target>.yaml get one deploy named after them.
 		for _, t := range targetNames {
-			if targetsWithInstances[t] {
-				continue // this target has instance-specific releases
-			}
-			if targetFiles[t] {
-				helmCfg.Releases[t] = config.HelmRelease{
-					ReleaseName: "RELEASE-NAME-" + t,
-					Target:      t,
-					Values:      []string{t + ".yaml"},
-				}
+			if !targetsWithInstances[t] && targetFiles[t] {
+				deploys[t] = config.Deploy{Chart: chart, Target: t, Values: []string{valuesPath(t)}}
 			}
 		}
 
-		if len(helmCfg.Releases) == 0 {
-			// Found a values dir but couldn't infer releases.
-			// Return just the dir so the user can fill in releases manually.
-			helmCfg.Releases = nil
-		}
-
-		return helmCfg
+		return deploys
 	}
-	return nil
+	return deploys
+}
+
+// detectManifestDeploys infers manifest deploys from directories of raw
+// kubernetes YAML. Each immediate subdirectory holding at least one manifest
+// becomes a deploy (a leading NN- ordering prefix is stripped from the name).
+// A candidate root holding manifests directly becomes a single deploy named
+// after the root.
+func detectManifestDeploys(projectRoot, target string) map[string]config.Deploy {
+	deploys := make(map[string]config.Deploy)
+
+	for _, root := range manifestCandidates {
+		entries, err := os.ReadDir(filepath.Join(projectRoot, root))
+		if err != nil {
+			continue
+		}
+
+		rootHasManifests := false
+		for _, e := range entries {
+			if e.IsDir() {
+				sub := filepath.Join(root, e.Name())
+				if dirHasManifests(filepath.Join(projectRoot, sub)) {
+					deploys[stripOrderPrefix(e.Name())] = config.Deploy{Manifests: sub, Target: target}
+				}
+				continue
+			}
+			if isManifestFile(e.Name()) {
+				rootHasManifests = true
+			}
+		}
+		if rootHasManifests {
+			deploys[filepath.Base(root)] = config.Deploy{Manifests: root, Target: target}
+		}
+		if len(deploys) > 0 {
+			return deploys
+		}
+	}
+	return deploys
+}
+
+// detectLocalChart returns the first candidate directory containing a
+// Chart.yaml, relative to the project root, or "" if none.
+func detectLocalChart(projectRoot string) string {
+	for _, dir := range chartCandidates {
+		if _, err := os.Stat(filepath.Join(projectRoot, dir, "Chart.yaml")); err == nil {
+			return dir
+		}
+	}
+	return ""
+}
+
+// commonRootDir returns the directory containing all discovered roots — the
+// common ancestor of their parent directories, relative to the project root.
+// Returns "" when any root sits at the repo root (no narrower container exists).
+func commonRootDir(roots []swoop.Root) string {
+	var common []string
+	for i, r := range roots {
+		parent := filepath.Dir(r.Path)
+		if parent == "." {
+			return ""
+		}
+		segs := strings.Split(parent, string(filepath.Separator))
+		if i == 0 {
+			common = segs
+			continue
+		}
+		common = commonPrefix(common, segs)
+		if len(common) == 0 {
+			return ""
+		}
+	}
+	return filepath.Join(common...)
+}
+
+func commonPrefix(a, b []string) []string {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return a[:i]
+}
+
+func deploysNeedTarget(deploys map[string]config.Deploy) bool {
+	for _, d := range deploys {
+		if d.Target == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func promptDeployTargets() (map[string]config.TargetConfig, error) {
+	names := mapKeys(cfg.Kubernetes.Contexts)
+	sort.Strings(names)
+
+	items := make([]selectItem, len(names))
+	for i, n := range names {
+		items[i] = selectItem{
+			name:    n,
+			preview: fmt.Sprintf("%s = %s\n", acPreviewKey.Render("context"), cfg.Kubernetes.Contexts[n]),
+		}
+	}
+
+	result, err := runTUI(multiSelectModel{
+		title:    "Deploy targets to add to .kestconfig",
+		items:    items,
+		selected: make(map[int]bool),
+	})
+	if err != nil {
+		return nil, err
+	}
+	ms := result.(multiSelectModel)
+	if ms.cancelled {
+		return nil, nil
+	}
+
+	targets := make(map[string]config.TargetConfig)
+	for i, n := range names {
+		if ms.selected[i] {
+			targets[n] = config.TargetConfig{Cluster: n}
+		}
+	}
+	return targets, nil
+}
+
+// usesOpenTofu reports whether any discovered root pins its version with an
+// .opentofu-version file (OpenTofu's native convention), signalling that the
+// repo drives tofu rather than terraform.
+func usesOpenTofu(roots []swoop.Root) bool {
+	for _, r := range roots {
+		if _, err := os.Stat(filepath.Join(r.AbsPath, ".opentofu-version")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func mapKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func dirHasManifests(path string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && isManifestFile(e.Name()) {
+			return true
+		}
+	}
+	return false
+}
+
+func isManifestFile(name string) bool {
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
+}
+
+// stripOrderPrefix drops a leading NN- ordering prefix (e.g. "01-authentik" →
+// "authentik"), leaving the name unchanged when there is none.
+func stripOrderPrefix(name string) string {
+	i := 0
+	for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+		i++
+	}
+	if i > 0 && i < len(name) && name[i] == '-' {
+		return name[i+1:]
+	}
+	return name
 }
 
 // mergeSetupResult merges setup's proposed config into an existing config.
@@ -398,18 +599,18 @@ func mergeSetupResult(existing, proposed *config.Config, force bool) *config.Con
 	if proposed.Terraform.IACDir != "" && (result.Terraform.IACDir == "" || force) {
 		result.Terraform.IACDir = proposed.Terraform.IACDir
 	}
-
-	// Merge helm settings.
-	if proposed.Helm.ValuesDir != "" && (result.Helm.ValuesDir == "" || force) {
-		result.Helm.ValuesDir = proposed.Helm.ValuesDir
+	if proposed.Terraform.Command != "" && (result.Terraform.Command == "" || force) {
+		result.Terraform.Command = proposed.Terraform.Command
 	}
-	if len(proposed.Helm.Releases) > 0 {
-		if result.Helm.Releases == nil {
-			result.Helm.Releases = make(map[string]config.HelmRelease)
+
+	// Merge deploys.
+	if len(proposed.Deploys) > 0 {
+		if result.Deploys == nil {
+			result.Deploys = make(map[string]config.Deploy)
 		}
-		for name, rel := range proposed.Helm.Releases {
-			if _, exists := result.Helm.Releases[name]; !exists || force {
-				result.Helm.Releases[name] = rel
+		for name, d := range proposed.Deploys {
+			if _, exists := result.Deploys[name]; !exists || force {
+				result.Deploys[name] = d
 			}
 		}
 	}

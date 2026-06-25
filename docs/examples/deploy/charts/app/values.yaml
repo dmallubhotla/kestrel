@@ -1,0 +1,6 @@
+# Defaults for the shared app chart. Per-app values override these
+# (see deploys/homepage.yaml).
+name: app
+image: nginx:alpine
+replicas: 1
+port: 80

@@ -229,6 +229,24 @@
               bash ${./test/compat/compat.sh} ${pkgs.kest}/bin/kest
               touch $out
             '';
+        # Deploy smoke: exercises `kest deploy` / `kestci deploy` executor
+        # selection + resolution end-to-end. kubectl and helm are stubbed by
+        # the script itself, so no cluster (or those binaries) are needed.
+        deploy-smoke =
+          pkgs.runCommand "kest-deploy-smoke"
+            {
+              nativeBuildInputs = [
+                pkgs.kest
+                pkgs.kestci
+                pkgs.bash
+              ];
+            }
+            ''
+              export HOME=$TMPDIR
+              export KESTCI=${pkgs.kestci}/bin/kestci
+              bash ${./test/deploy/deploy.sh} ${pkgs.kest}/bin/kest
+              touch $out
+            '';
       });
 
       devShells = eachSystem (pkgs: {
@@ -239,6 +257,11 @@
             golangci-lint
             go-tools
             gopls
+            terraform
+            opentofu
+            kubernetes-helm
+            kubectl
+            awscli2
             gomod2nix.packages.${pkgs.stdenv.hostPlatform.system}.default
             hanko.packages.${pkgs.stdenv.hostPlatform.system}.default
           ];

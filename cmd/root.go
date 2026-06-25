@@ -52,10 +52,10 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		slog.Debug("config loaded", "chart", cfg.Helm.Chart, "iac_dir", cfg.Terraform.IACDir)
+		slog.Debug("config loaded", "iac_dir", cfg.Terraform.IACDir, "deploys", len(cfg.Deploys))
 		if verbose {
-			fmt.Fprintf(os.Stderr, "debug: config loaded (chart=%s, iac_dir=%s)\n",
-				cfg.Helm.Chart, cfg.Terraform.IACDir)
+			fmt.Fprintf(os.Stderr, "debug: config loaded (iac_dir=%s, deploys=%d)\n",
+				cfg.Terraform.IACDir, len(cfg.Deploys))
 		}
 
 		// Fall back to active profile when no -e flag (skip in CI)
