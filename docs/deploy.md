@@ -3,19 +3,17 @@
 `kest deploy` applies an **app** to a resolved cluster, picking its executor
 automatically: a helm chart (`helm upgrade --install`) or a directory of raw
 manifests (`kubectl apply -f`). It's the cluster-agnostic, multi-app path —
-Talos, kind, bare named contexts, EKS — with the same target resolution, guard
+kind, k3s, bare named contexts, EKS — with the same target resolution, guard
 stack, and ambient-vs-profile policy that `kest swoop` uses for terraform.
 
-It is the non-EKS sibling of [`kest release`](../README.md#helm). Use `release`
-for the single-OCI-chart, env-layered, image-tag-resolving EKS work-repo flow;
-use `deploy` for "a bunch of apps, each its own chart or manifest set, on
-whatever cluster." For the design rationale see
-[deploy-routines.md](deploy-routines.md).
+It's built for "a bunch of apps, each its own chart or manifest set, on whatever
+cluster" — each `deploys:` entry names one app and one source. For the design
+rationale see [deploy-routines.md](deploy-routines.md).
 
 ## Config
 
-Apps go under `deploys:` in `.kestconfig` (sibling of `helm.releases`). Each
-entry sets **exactly one** source — `chart:` (helm) or `manifests:` (kubectl):
+Apps go under `deploys:` in `.kestconfig`. Each entry sets **exactly one**
+source — `chart:` (helm) or `manifests:` (kubectl):
 
 ```yaml
 deploys:
@@ -43,10 +41,10 @@ deploys:
 
 targets:
   homelab:
-    cluster: admin@homelab            # a named kube context (Talos, kind, …),
+    cluster: my-cluster               # a named kube context (kind, k3s, …),
                                       # resolved via kubernetes.contexts or used
                                       # literally — not necessarily an EKS ARN
-    kubeconfig: iac-live/talos-config/kubeconfig   # optional explicit kubeconfig
+    kubeconfig: iac-live/cluster/kubeconfig   # optional explicit kubeconfig
 ```
 
 Fields, per deploy:
@@ -67,11 +65,12 @@ Fields, per deploy:
 ### Target resolution (cluster-agnostic)
 
 A target's `cluster` is looked up in your global `kubernetes.contexts`; if it
-isn't mapped, the literal value is used as the context name. So a Talos context
-like `admin@homelab` "just works" once it's in your kubeconfig (e.g. merged via
-`just kubeconfig`). The optional `kubeconfig:` points at an explicit file — handy
-in CI, or to read a terraform-output kubeconfig without merging it into
-`~/.kube/config`. AWS profile resolution is unchanged and stays empty for
+isn't mapped, the literal value is used as the context name. So a bare named
+context like `my-cluster` "just works" once it's in your kubeconfig (e.g. merged
+in by hand or by a `just kubeconfig` helper). The optional `kubeconfig:` points
+at an explicit file — handy in CI, or to read a terraform-output kubeconfig
+without merging it into `~/.kube/config`. AWS profile resolution is unchanged:
+for an EKS target it resolves the account's profile, and it stays empty for
 non-AWS clusters.
 
 ## Usage
@@ -92,9 +91,9 @@ diff", not a failure). It's read-only and skips the guard stack.
 
 ### Guards
 
-Applies go through the same guards as `kest release`: CI-only, clean worktree,
-and prod-only-from-main. `--force` bypasses all three for local applies.
-`--diff` is exempt (read-only).
+Applies go through the standard guard stack: CI-only, clean worktree, and
+prod-only-from-main. `--force` bypasses all three for local applies. `--diff`
+is exempt (read-only).
 
 ## In CI (`kestci deploy`)
 
@@ -110,15 +109,17 @@ kestci deploy gitea --diff           # read-only
 
 Supply the kubeconfig the way that fits your runner: a `KUBECONFIG` secret, an
 explicit `kubeconfig:` on the target (e.g. a terraform-output file written by an
-earlier job step), or — for EKS — an `aws eks update-kubeconfig` step before
-`kestci deploy`. See [ci.md](ci.md) for the blast-radius tiering that decides
+earlier job step), or — for EKS — a step that writes a kubeconfig for the
+cluster before `kestci deploy`. See [ci.md](ci.md) for the blast-radius tiering
+that decides
 *which* clusters should be driven from CI at all (Tier-2 platform/SSO stacks
 usually shouldn't).
 
 ## What `deploy` is not
 
-- **Not `kest release`.** No `image.tag` resolution, no `shared.yaml`/`<target>`
-  values layering, no `aws eks update-kubeconfig`. That's the EKS work-repo path.
+- **Not an image-tag pipeline.** `kest deploy` applies what's in your chart and
+  values as-is — no image-tag resolution and no automatic values layering beyond
+  the `values:` list you give it. Bake your own tags into values or pass `--set`.
 - **Not GitOps.** No `--prune`, no drift reconcile — `--diff` is the only read
   path. Argo/Flux own continuous reconciliation if you want it.
 - **Not the platform.** Cluster-tier helm (traefik, cert-manager, longhorn, …)

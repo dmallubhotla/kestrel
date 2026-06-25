@@ -2,7 +2,7 @@
 #
 # Scope: PUBLIC-API terraform stacks only (internet-reachable providers like
 # Cloudflare, AWS SES). Do NOT use a hosted runner for LAN/foundational stacks
-# (proxmox, Talos, in-cluster) — see docs/ci.md "Match CI to the blast radius".
+# (cluster foundation, in-cluster) — see docs/ci.md "Match CI to the blast radius".
 #
 # Prereqs:
 #   - .kestconfig committed at the repo root (command + iac_dir).

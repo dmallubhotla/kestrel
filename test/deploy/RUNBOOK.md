@@ -32,7 +32,7 @@ go test ./internal/deploy/
 ## 2. Real-cluster test (manual)
 
 Exercises the path against an actual cluster — a local `kind`/`k3d`, or the
-Talos homelab. Use a throwaway namespace.
+homelab cluster. Use a throwaway namespace.
 
 ### Setup
 
@@ -90,11 +90,12 @@ For the **helm** path, add a chart (e.g. `helm create charts/app`) and a
 print the rendered manifests (`--dry-run`) and `--force` should `helm upgrade
 --install` it. Verify with `helm --kube-context <ctx> -n <ns> list`.
 
-### Talos homelab variant
+### Homelab cluster variant
 
-Same, but the target's `cluster` is `admin@homelab` (merge it first with
-`just kubeconfig` in proxmox-homelab), or set an explicit `kubeconfig:` path on
-the target pointing at the terraform-output kubeconfig.
+Same, but the target's `cluster` is a bare named context like `my-cluster`
+(merge it into `~/.kube/config` first, e.g. via `just kubeconfig` in the
+homelab repo), or set an explicit `kubeconfig:` path on the target pointing at
+the terraform-output kubeconfig.
 
 ### Teardown
 

@@ -16,12 +16,12 @@ func TestHelmArgs_LocalChart(t *testing.T) {
 		Namespace: "homepage",
 		Target:    "homelab",
 	}
-	res := Resolution{KubeContext: "admin@homelab"}
+	res := Resolution{KubeContext: "my-cluster"}
 	got := helmArgs("homepage", d, res, ActionApply, nil)
 	want := []string{
 		"upgrade", "--install", "homepage", "charts/app",
 		"--namespace", "homepage", "--create-namespace",
-		"--kube-context", "admin@homelab",
+		"--kube-context", "my-cluster",
 		"--values", "deploys/homepage.yaml",
 		"--atomic", "--cleanup-on-fail", "--timeout", "5m0s",
 	}
@@ -38,7 +38,7 @@ func TestHelmArgs_ThirdPartyRepoChart(t *testing.T) {
 		Values:  []string{"deploys/authentik.yaml"},
 		Target:  "homelab",
 	}
-	res := Resolution{KubeContext: "admin@homelab", Kubeconfig: "/tmp/kubeconfig"}
+	res := Resolution{KubeContext: "my-cluster", Kubeconfig: "/tmp/kubeconfig"}
 	got := helmArgs("authentik", d, res, ActionApply, []string{"--wait"})
 	joined := strings.Join(got, " ")
 	for _, want := range []string{
@@ -84,20 +84,20 @@ func TestHelmArgs_SetDeterministic(t *testing.T) {
 }
 
 func TestKubectlArgs_Apply(t *testing.T) {
-	res := Resolution{KubeContext: "admin@homelab"}
+	res := Resolution{KubeContext: "my-cluster"}
 	got := kubectlArgs("k8s-manifests/gitea", res, "", false, nil)
-	want := []string{"apply", "-f", "k8s-manifests/gitea", "--context", "admin@homelab"}
+	want := []string{"apply", "-f", "k8s-manifests/gitea", "--context", "my-cluster"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("kubectlArgs mismatch\n got: %v\nwant: %v", got, want)
 	}
 }
 
 func TestKubectlArgs_Diff(t *testing.T) {
-	res := Resolution{KubeContext: "admin@homelab", Kubeconfig: "/tmp/kc"}
+	res := Resolution{KubeContext: "my-cluster", Kubeconfig: "/tmp/kc"}
 	got := kubectlArgs("k8s-manifests/gitea", res, "gitea", true, []string{"--server-side"})
 	want := []string{
 		"diff", "-f", "k8s-manifests/gitea",
-		"--context", "admin@homelab",
+		"--context", "my-cluster",
 		"--kubeconfig", "/tmp/kc",
 		"--namespace", "gitea",
 		"--server-side",
@@ -108,19 +108,19 @@ func TestKubectlArgs_Diff(t *testing.T) {
 }
 
 func TestResolve_NamedContextFallback(t *testing.T) {
-	// Talos: a target whose cluster has no kubernetes.contexts entry falls back
+	// A target whose cluster has no kubernetes.contexts entry falls back
 	// to using the cluster name as the context name directly.
 	cfg := &config.Config{
 		Targets: map[string]config.TargetConfig{
-			"homelab": {Cluster: "admin@homelab"},
+			"homelab": {Cluster: "my-cluster"},
 		},
 	}
 	res, err := Resolve(cfg, "homelab")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if res.KubeContext != "admin@homelab" {
-		t.Errorf("KubeContext = %q, want admin@homelab", res.KubeContext)
+	if res.KubeContext != "my-cluster" {
+		t.Errorf("KubeContext = %q, want my-cluster", res.KubeContext)
 	}
 	if res.AwsProfile != "" {
 		t.Errorf("AwsProfile = %q, want empty for non-AWS cluster", res.AwsProfile)
@@ -157,7 +157,7 @@ func TestResolve_MappedContextAndProfile(t *testing.T) {
 func TestResolve_ExplicitKubeconfigRelativeToProject(t *testing.T) {
 	cfg := &config.Config{
 		Targets: map[string]config.TargetConfig{
-			"homelab": {Cluster: "admin@homelab", Kubeconfig: "iac-live/talos-config/kubeconfig"},
+			"homelab": {Cluster: "my-cluster", Kubeconfig: "iac-live/cluster/kubeconfig"},
 		},
 		Sources: config.Sources{Project: "/repo/.kestconfig"},
 	}
@@ -165,7 +165,7 @@ func TestResolve_ExplicitKubeconfigRelativeToProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	want := filepath.Join("/repo", "iac-live/talos-config/kubeconfig")
+	want := filepath.Join("/repo", "iac-live/cluster/kubeconfig")
 	if res.Kubeconfig != want {
 		t.Errorf("Kubeconfig = %q, want %q", res.Kubeconfig, want)
 	}

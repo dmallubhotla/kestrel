@@ -79,7 +79,7 @@ Each container starts empty, so `terraform init` re-downloads providers every ru
 
 ## kestci in CI
 
-`kestci` needs no mounts beyond the repo: AWS credentials come from the environment (OIDC or env vars), and it generates its own kubeconfig from the target's `cluster` + `region` via `aws eks update-kubeconfig`. It refuses to run unless `CI=true` (GitHub Actions sets this automatically).
+`kestci` needs no mounts beyond the repo: AWS credentials come from the environment (OIDC or env vars), and the kubeconfig comes from the environment (a `KUBECONFIG` secret or a target's explicit `kubeconfig:`). It refuses to run unless `CI=true` (GitHub Actions sets this automatically).
 
 Run the job inside the image and the whole toolchain is already there:
 
@@ -101,10 +101,10 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::111122223333:role/deploy
           aws-region: us-east-1
-      - run: kestci release deploy --all -e dev --tag "${GITHUB_SHA::7}"
+      - run: kestci deploy --all --target dev
 ```
 
-Because the kubeconfig kestci writes lives in the container's `$HOME`, keep related steps (deploy + verification) in the same job so they share it.
+Keep related steps (deploy + verification) in the same job so they share the same kubeconfig from the environment.
 
 ## Building locally
 

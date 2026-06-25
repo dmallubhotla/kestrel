@@ -81,7 +81,7 @@ assert_not_contains() { if [[ $3 != *"$2"* ]]; then ok "$1"; else fail "$1" "NOT
 
 # ── project fixture ─────────────────────────────────────────────────────────
 # A .kestconfig with one manifest deploy, two helm deploys (local + 3rd-party),
-# and a target whose cluster is a bare named context (Talos style) with no
+# and a target whose cluster is a bare named context with no
 # kubernetes.contexts entry — so resolution must fall back to the literal name.
 
 mkproject() {
@@ -109,7 +109,7 @@ deploys:
     target: homelab
 targets:
   homelab:
-    cluster: admin@homelab
+    cluster: my-cluster
 EOF
   printf "%s" "$dir"
 }
@@ -123,7 +123,7 @@ echo "▶ manifest deploy → kubectl apply"
 proj=$(mkproject)
 out=$(cd "$proj" && "$KEST" deploy gitea --force 2>&1 || true)
 assert_contains "manifest uses kubectl apply -f" "KUBECTL apply -f k8s-manifests/gitea" "$out"
-assert_contains "manifest resolves bare context literally" "--context admin@homelab" "$out"
+assert_contains "manifest resolves bare context literally" "--context my-cluster" "$out"
 assert_not_contains "manifest does not shell out to helm" "HELM " "$out"
 
 echo
@@ -136,7 +136,7 @@ echo "▶ helm deploy (local chart) → helm upgrade --install"
 out=$(cd "$proj" && "$KEST" deploy homepage --force 2>&1 || true)
 assert_contains "helm upgrade --install with release+chart" "HELM upgrade --install homepage charts/app" "$out"
 assert_contains "helm namespace + create-namespace" "--namespace homepage --create-namespace" "$out"
-assert_contains "helm kube-context resolved" "--kube-context admin@homelab" "$out"
+assert_contains "helm kube-context resolved" "--kube-context my-cluster" "$out"
 assert_contains "helm values file layered" "--values deploys/homepage.yaml" "$out"
 assert_contains "helm apply gets --atomic" "--atomic" "$out"
 
@@ -175,11 +175,11 @@ out=$(cd "$proj" && "$KEST" deploy gitea --diff 2>&1 || true)
 assert_contains "diff is allowed without --force" "KUBECTL diff" "$out"
 
 echo
-echo "▶ explicit kubeconfig path on target (Talos/CI) → --kubeconfig"
+echo "▶ explicit kubeconfig path on target (CI) → --kubeconfig"
 proj2=$(mktemp -d)
-mkdir -p "$proj2/k8s-manifests/app" "$proj2/iac-live/talos/"
+mkdir -p "$proj2/k8s-manifests/app" "$proj2/iac-live/cluster/"
 echo "{}" >"$proj2/k8s-manifests/app/00-ns.yaml"
-echo "fake-kubeconfig" >"$proj2/iac-live/talos/kubeconfig"
+echo "fake-kubeconfig" >"$proj2/iac-live/cluster/kubeconfig"
 cat >"$proj2/.kestconfig" <<'EOF'
 deploys:
   app:
@@ -187,11 +187,11 @@ deploys:
     target: homelab
 targets:
   homelab:
-    cluster: admin@homelab
-    kubeconfig: iac-live/talos/kubeconfig
+    cluster: my-cluster
+    kubeconfig: iac-live/cluster/kubeconfig
 EOF
 out=$(cd "$proj2" && "$KEST" deploy app --force 2>&1 || true)
-assert_contains "explicit kubeconfig passed to kubectl" "--kubeconfig $proj2/iac-live/talos/kubeconfig" "$out"
+assert_contains "explicit kubeconfig passed to kubectl" "--kubeconfig $proj2/iac-live/cluster/kubeconfig" "$out"
 
 # ── kestci surface (optional — only if a kestci binary is available) ─────────
 if [[ -n $KESTCI && -x $KESTCI ]]; then

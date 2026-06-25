@@ -15,8 +15,8 @@ plane accordingly.
 
 | Tier | Example stacks | A bad apply takes down… | Manage from |
 | --- | --- | --- | --- |
-| 0 — foundation | `proxmox-cluster` | everything | **workstation only** (`kest swoop`) |
-| 1 — cluster | `talos-cluster`, `talos-config` | the cluster, incl. any in-cluster runner | **workstation only** |
+| 0 — foundation | `cluster-base` | everything | **workstation only** (`kest swoop`) |
+| 1 — cluster | `cluster`, `cluster-config` | the cluster, incl. any in-cluster runner | **workstation only** |
 | 2 — platform | `k8s-platform`, `authentik` | maybe your CI/SSO themselves | workstation; in-cluster CI only with eyes open |
 | 3 — app / edge | `cloudflare`, `ses-smtp` | nothing you depend on to recover | hosted CI is safe |
 
@@ -27,7 +27,7 @@ Consequences:
   tool that fixes it, with no out-of-band path back. Keep these on
   `kest swoop apply` from a workstation that depends on none of it.
 - **Tier 3 is the sweet spot for hosted CI** (GitHub/Gitea cloud): public-API
-  providers, no LAN access, no circular dependency, no homelab trust surface.
+  providers, no LAN access, no circular dependency, no LAN trust surface.
 - Because `kest` and `kestci` share a resolution spine, **CI is never a hard
   dependency.** Whatever you automate, `kest swoop apply` from your laptop
   reproduces it byte-for-byte — your break-glass path, as long as you keep it

@@ -39,8 +39,8 @@ const backendAssumeRoleTF = `terraform {
 provider "cloudflare" {}
 `
 
-// The proxmox-homelab case: no provider/account markers, the only AWS
-// touchpoint is the S3 backend's assume_role. The effective profile must fall
+// A repo whose only AWS touchpoint is an S3 backend assume_role: no
+// provider/account markers. The effective profile must fall
 // back to the backend account's profile — this is exactly the resolution that
 // used to be missing from the kestci path.
 func TestEffectiveProfiles_BackendFallback(t *testing.T) {

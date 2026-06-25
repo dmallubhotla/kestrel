@@ -22,7 +22,7 @@ Notes:
 
 ## `swoop list` AWS column should reflect what apply actually uses
 
-`printRootTable` (`cmd/swoop.go:233`) fills the AWS column from `resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)` alone. That returns empty unless the root has an `allowed_account_ids`-style marker, a `directories` mapping, or an active `-e` target — so for repos whose only AWS touchpoint is an S3 backend with `assume_role` (e.g. proxmox-homelab, account `677425296084` → `homelab`), every root shows `-`.
+`printRootTable` (`cmd/swoop.go:233`) fills the AWS column from `resolve.AWSProfileForRoot(cfg, r.Dir, r.AccountID, environment)` alone. That returns empty unless the root has an `allowed_account_ids`-style marker, a `directories` mapping, or an active `-e` target — so for repos whose only AWS touchpoint is an S3 backend with `assume_role` (e.g. the homelab repo, account `111122223333` → `homelab`), every root shows `-`.
 
 But the *executor* resolves more: `cmd/swoop_actions.go` adds a `backendProfileFor` fallback (`swoop.ExtractBackendAuth`, reading the backend `role_arn`) at lines ~216/229. So `kest swoop apply` runs with `AWS_PROFILE=homelab` while `kest swoop list` claims `-`. The list lies about what apply does.
 
@@ -106,16 +106,13 @@ chosen per `deploys:` entry), shared target resolution, guard stack, and
 ambient-vs-profile policy. Supports local in-repo charts, third-party/OCI charts,
 and `kubectl apply -f` manifest dirs; `--diff` is the plan analog. Targets gained
 an optional explicit `kubeconfig`, and cluster names resolve to named contexts
-(Talos `admin@homelab`) without an EKS ARN. Design + rationale:
+(a bare named context like `my-cluster`) without an EKS ARN. Design + rationale:
 [deploy-routines.md](deploy-routines.md); user guide: [deploy.md](deploy.md);
 example: [examples/deploy/](../examples/deploy/).
 
 Deliberately left for later:
-- **Helm `release` onto the same spine.** The EKS `kest release` path (single OCI
-  chart, `image.tag` resolution, env-layered values) still forks its own
-  local/CI implementations; folding it into `internal/deploy` as a third executor
-  would retire that fork, the way the terraform spine retired swoop/kestci's.
-- **`kestci deploy` for EKS manifests** would want an `aws eks update-kubeconfig`
-  step (today: supply `KUBECONFIG` or a target `kubeconfig:`).
+- **`kestci deploy` for EKS manifests** would want a step that writes a
+  kubeconfig for the cluster before deploy (today: supply `KUBECONFIG` or a
+  target `kubeconfig:`).
 - **`kustomize` executor** (`kubectl apply -k`) if a repo ever needs it.
 

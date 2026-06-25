@@ -23,10 +23,8 @@ var deployCmd = &cobra.Command{
 	Long: `Deploy an app defined under deploys: in .kestconfig. Each deploy is a
 helm chart (chart:) or a directory of raw manifests (manifests:); kest picks
 the executor automatically. The deploy's target determines the cluster — no
--e flag needed.
-
-This is the cluster-agnostic, multi-app path (Talos, kind, EKS, …). For the
-single-chart EKS work-repo flow with image-tag resolution, use 'kest release'.
+-e flag needed. Works against any cluster: named kube contexts, an explicit
+kubeconfig, or EKS.
 
 Use --all to deploy every app (optionally filtered by --target), --diff for a
 read-only preview (kubectl diff / helm --dry-run), and --force to bypass guards.

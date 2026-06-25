@@ -24,9 +24,9 @@ deploys:
 
 targets:
   homelab:
-    # A named kube context (Talos/kind/k3s) — resolved via the global
+    # A named kube context (kind/k3s, or any cluster) — resolved via the global
     # kubernetes.contexts, or used literally if unmapped.
-    cluster: admin@homelab
+    cluster: my-cluster
     # Optional explicit kubeconfig (e.g. a terraform output), project-relative.
     # Drop this to use the ambient ~/.kube/config / $KUBECONFIG instead.
-    kubeconfig: iac-live/talos-config/kubeconfig
+    kubeconfig: iac-live/cluster/kubeconfig

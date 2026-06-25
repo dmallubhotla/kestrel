@@ -1,8 +1,6 @@
 // Package deploy is the cluster-agnostic app-deploy spine shared by
-// `kest deploy` and `kestci deploy`. It mirrors the terraform spine in
-// internal/swoop: one resolve → execute loop with a pluggable executor
-// (helm or kubectl, chosen per config.Deploy) and a small Policy carrying the
-// only intended differences between the interactive and CI surfaces.
+// `kest deploy` and `kestci deploy`: resolve a target, then execute via a
+// pluggable executor (helm or kubectl) under an interactive or CI Policy.
 package deploy
 
 import (
@@ -22,28 +20,23 @@ const (
 	ActionDiff  = "diff"  // helm upgrade --dry-run / kubectl diff (read-only)
 )
 
-// Resolution is the resolved cluster-access picture for a deploy target: the
-// kube context to act in, an optional explicit kubeconfig file, and the AWS
-// profile/account (empty for non-AWS clusters like Talos). This is the one
-// resolver shared by `kest deploy` and `kestci deploy`.
+// Resolution is the resolved cluster access for a deploy target.
 type Resolution struct {
-	// KubeContext is the --kube-context / --context to use. Empty means use
-	// the kubeconfig's current-context.
+	// KubeContext is the context to act in. Empty uses the current-context.
 	KubeContext string
-	// Kubeconfig is an explicit --kubeconfig path (already resolved against the
-	// project root). Empty means the ambient kubeconfig ($KUBECONFIG / default).
+	// Kubeconfig is an explicit kubeconfig path (resolved against the project
+	// root). Empty uses the ambient kubeconfig.
 	Kubeconfig string
-	// AwsProfile is the profile to inject as AWS_PROFILE (under the non-ambient
-	// policy). Empty for non-AWS clusters.
+	// AwsProfile is injected as AWS_PROFILE under the non-ambient policy. Empty
+	// for non-AWS clusters.
 	AwsProfile string
-	// AccountID is the AWS account expected, echoed under ambient credentials
-	// so a mismatch fails legibly.
+	// AccountID is the expected AWS account, echoed for legibility.
 	AccountID string
 }
 
-// Policy parameterizes how a resolved deploy is executed. The zero value is the
-// `kest deploy` posture: inject the resolved AWS profile. Ambient is the
-// `kestci` posture: credentials and kubeconfig come from the environment.
+// Policy parameterizes execution. The zero value is the `kest deploy` posture
+// (inject the resolved AWS profile); Ambient is the `kestci` posture
+// (credentials and kubeconfig from the environment).
 type Policy struct {
 	// Ambient: don't set AWS_PROFILE; credentials come from the environment.
 	Ambient bool
@@ -65,11 +58,6 @@ type ExecResult struct {
 	ExitCode int
 }
 
-// Resolve resolves a target name to its cluster-access picture. Unlike
-// config.ResolveTarget (EKS-shaped, errors when a cluster has no mapped
-// context), this is lenient: a target's cluster is looked up in
-// kubernetes.contexts and falls back to the literal value, so a named context
-// like Talos's "admin@homelab" works without a contexts entry.
 func Resolve(cfg *config.Config, targetName string) (Resolution, error) {
 	if cfg == nil {
 		return Resolution{}, fmt.Errorf("no config loaded")
@@ -83,7 +71,7 @@ func Resolve(cfg *config.Config, targetName string) (Resolution, error) {
 	if t.Cluster != "" {
 		ctx := cfg.ResolveClusterContext(t.Cluster)
 		if ctx == "" {
-			// No mapping — treat the cluster name as the context name directly.
+			// Unmapped cluster name is used as the context name directly.
 			ctx = t.Cluster
 		}
 		res.KubeContext = ctx
@@ -109,9 +97,8 @@ func Resolve(cfg *config.Config, targetName string) (Resolution, error) {
 }
 
 // Execute runs one deploy action, picking the executor from d.Kind() and
-// applying credentials per policy. The command runs from the project root so
-// chart/manifest/values paths resolve relative to it. extra is passed through
-// to the underlying tool.
+// applying credentials per policy. It runs from the project root so
+// chart/manifest/values paths resolve relative to it.
 func Execute(cfg *config.Config, name string, d config.Deploy, res Resolution, action string, pol Policy, extra []string) (*ExecResult, error) {
 	if err := d.Validate(name); err != nil {
 		return nil, err
@@ -147,8 +134,7 @@ func Execute(cfg *config.Config, name string, d config.Deploy, res Resolution, a
 	})
 	out := &ExecResult{ExitCode: result.ExitCode}
 
-	// `kubectl diff` exits 1 when a diff is present — that's the answer, not a
-	// failure. Anything higher is a real error.
+	// kubectl diff exits 1 when differences exist; higher codes are real errors.
 	if d.Kind() == config.DeployManifest && action == ActionDiff && result.ExitCode == 1 {
 		return out, nil
 	}

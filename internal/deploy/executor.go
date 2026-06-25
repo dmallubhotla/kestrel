@@ -2,10 +2,8 @@ package deploy
 
 import "github.com/dmallubhotla/kestrel/internal/config"
 
-// helmArgs builds the `helm` CLI args for a deploy. For ActionApply it is
-// `helm upgrade --install` with the existing release-path defaults
-// (--atomic --cleanup-on-fail --timeout); for ActionDiff it adds --dry-run
-// and drops the apply-only flags so nothing is mutated.
+// helmArgs builds the helm args for a deploy: `upgrade --install` for apply
+// (with --atomic --cleanup-on-fail --timeout), or --dry-run for diff.
 func helmArgs(release string, d config.Deploy, res Resolution, action string, extra []string) []string {
 	args := []string{"upgrade", "--install", release, d.Chart}
 
@@ -40,8 +38,8 @@ func helmArgs(release string, d config.Deploy, res Resolution, action string, ex
 	return append(args, extra...)
 }
 
-// kubectlArgs builds the `kubectl` CLI args for a manifest deploy: `apply -f`
-// for ActionApply, `diff -f` for ActionDiff.
+// kubectlArgs builds the kubectl args for a manifest deploy: `apply -f` or
+// `diff -f`.
 func kubectlArgs(path string, res Resolution, namespace string, diff bool, extra []string) []string {
 	verb := "apply"
 	if diff {

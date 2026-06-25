@@ -1,6 +1,6 @@
 # Example: `kest deploy` combining terraform + helm + manifests
 
-A worked layout for a non-EKS cluster (Talos/kind/k3s) where:
+A worked layout for a non-EKS cluster (kind/k3s, or any named context) where:
 
 - **terraform** stands up the cluster and platform, and emits a kubeconfig;
 - **`kest deploy`** rolls out apps on top — some as helm charts (a shared
@@ -26,15 +26,15 @@ target's `kubeconfig:` points at that file, so kest deploys against exactly the
 cluster terraform built — no manual `~/.kube/config` merge required:
 
 ```hcl
-# iac-live/talos-config/outputs.tf (in your infra repo)
-output "kubeconfig" { value = module.talos.kubeconfig, sensitive = true }
+# iac-live/cluster/outputs.tf (in your infra repo)
+output "kubeconfig" { value = module.cluster.kubeconfig, sensitive = true }
 ```
 
 ```sh
 # 1. infra: cluster + platform helm (traefik, longhorn, …) live here, in TF state
-kest swoop apply talos-cluster
+kest swoop apply cluster
 kest swoop apply k8s-platform
-tofu -chdir=iac-live/talos-config output -raw kubeconfig > iac-live/talos-config/kubeconfig
+tofu -chdir=iac-live/cluster output -raw kubeconfig > iac-live/cluster/kubeconfig
 
 # 2. apps: kest deploy takes over from here
 kest deploy --all --target homelab
