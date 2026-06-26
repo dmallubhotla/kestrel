@@ -151,6 +151,7 @@
           modules = ./gomod2nix.toml;
           subPackages = [ "." ];
           nativeBuildInputs = [ final.installShellFiles ];
+          CGO_ENABLED = 0;
           ldflags = commonLdflags;
           postInstall = ''
             mv $out/bin/kestrel $out/bin/kest
@@ -167,6 +168,7 @@
           modules = ./gomod2nix.toml;
           subPackages = [ "cmd/kestci" ];
           nativeBuildInputs = [ final.installShellFiles ];
+          CGO_ENABLED = 0;
           ldflags = commonLdflags;
           postInstall = ''
             installShellCompletion --cmd kestci \
