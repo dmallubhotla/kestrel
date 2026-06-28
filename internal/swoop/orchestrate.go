@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/resolve"
 )
 
 // Resolution is the resolved credential picture for a terraform root: the

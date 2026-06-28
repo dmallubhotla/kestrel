@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
-	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/kubeconfig"
+	"github.com/deepak-science/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 

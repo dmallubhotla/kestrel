@@ -1,6 +1,6 @@
 package main
 
-import "github.com/dmallubhotla/kestrel/cmd"
+import "github.com/deepak-science/kestrel/cmd"
 
 var (
 	version = "dev"

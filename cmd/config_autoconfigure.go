@@ -10,10 +10,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dmallubhotla/kestrel/internal/awsconfig"
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/kubeconfig"
-	"github.com/dmallubhotla/kestrel/internal/swoop"
+	"github.com/deepak-science/kestrel/internal/awsconfig"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/kubeconfig"
+	"github.com/deepak-science/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

@@ -11,7 +11,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hanko = {
-      url = "github:dmallubhotla/hanko";
+      url = "github:deepak-science/hanko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -139,7 +139,7 @@
                 "kest + kestci with helm, terraform, opentofu, kubectl, awscli, and git bundled";
               "org.opencontainers.image.version" = version;
               "org.opencontainers.image.revision" = self.rev or self.dirtyRev or "unknown";
-              "org.opencontainers.image.source" = "https://github.com/dmallubhotla/kestrel";
+              "org.opencontainers.image.source" = "https://github.com/deepak-science/kestrel";
             };
           };
         };

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dmallubhotla/kestrel/internal/swoop"
+	"github.com/deepak-science/kestrel/internal/swoop"
 )
 
 // lastActivity returns the most recent timestamp from any action on a root.

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/deepak-science/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 

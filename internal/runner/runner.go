@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmallubhotla/kestrel/internal/execlog"
+	"github.com/deepak-science/kestrel/internal/execlog"
 )
 
 // Options configures a RunWithOpts call.
