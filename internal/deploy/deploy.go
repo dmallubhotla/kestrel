@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/runner"
 )
 
 // Deploy actions.

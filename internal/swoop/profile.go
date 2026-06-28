@@ -1,8 +1,8 @@
 package swoop
 
 import (
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/resolve"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/resolve"
 )
 
 // ResolveAWSProfile delegates to resolve.AWSProfileForRoot.

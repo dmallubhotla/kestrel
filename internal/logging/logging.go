@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/dmallubhotla/kestrel/internal/profile"
+	"github.com/deepak-science/kestrel/internal/profile"
 )
 
 // Init sets up file-based logging to $XDG_CACHE_HOME/kest/logs/kest.log.

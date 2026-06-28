@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dmallubhotla/kestrel/internal/swoop"
+	"github.com/deepak-science/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

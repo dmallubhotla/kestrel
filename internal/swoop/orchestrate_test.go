@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dmallubhotla/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/config"
 )
 
 // writeRoot creates a temp dir containing a single main.tf and returns a Root

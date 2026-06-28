@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dmallubhotla/kestrel/internal/guard"
-	"github.com/dmallubhotla/kestrel/internal/swoop"
+	"github.com/deepak-science/kestrel/internal/guard"
+	"github.com/deepak-science/kestrel/internal/swoop"
 	"github.com/spf13/cobra"
 )
 

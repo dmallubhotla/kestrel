@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-REPO="dmallubhotla/kestrel"
+REPO="deepak-science/kestrel"
 
 usage() {
   cat <<-EOF

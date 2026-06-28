@@ -22,11 +22,11 @@ set -Eeuo pipefail
 #   e.g. deploy-image.sh kest-docker-linux-amd64.tar.gz kest-docker-linux-arm64.tar.gz
 #
 # Configuration (environment variables):
-#   IMAGE               image repository (default ghcr.io/dmallubhotla/kestrel)
+#   IMAGE               image repository (default ghcr.io/deepak-science/kestrel)
 #   REGISTRY_USER       login user (login skipped if unset)
 #   REGISTRY_PASSWORD   login password/token
 
-IMAGE=${IMAGE:-"ghcr.io/dmallubhotla/kestrel"}
+IMAGE=${IMAGE:-"ghcr.io/deepak-science/kestrel"}
 REGISTRY="${IMAGE%%/*}"
 
 # Collapsible log sections: GitHub Actions output groups on CI, plain

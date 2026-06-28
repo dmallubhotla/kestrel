@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/deepak-science/kestrel/internal/runner"
 )
 
 // ExecResult captures the outcome of a terraform execution.

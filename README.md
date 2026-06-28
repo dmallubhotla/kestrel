@@ -18,7 +18,7 @@ It's particularly useful if you're deploying the same app to multiple EKS cluste
 Quick install (linux-amd64, linux-arm64, darwin-arm64):
 
 ```sh
-curl -fsSL https://github.com/dmallubhotla/kestrel/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/deepak-science/kestrel/releases/latest/download/install.sh | bash
 ```
 
 See [`scripts/install.sh`](scripts/install.sh) or run it with `--help` for options.
@@ -28,7 +28,7 @@ See [`scripts/install.sh`](scripts/install.sh) or run it with `--help` for optio
 Every release also publishes a container image to ghcr with `kest`, `kestci`, and the tools they shell out to (terraform, opentofu, helm, kubectl, aws, git) bundled:
 
 ```sh
-docker run --rm ghcr.io/dmallubhotla/kestrel:latest kest --version
+docker run --rm ghcr.io/deepak-science/kestrel:latest kest --version
 ```
 
 Tags follow the release version (`0.2.0`, `0.2`, `0`, `latest`), multi-arch for linux amd64/arm64. Mount your project and AWS config to do real work:
@@ -37,7 +37,7 @@ Tags follow the release version (`0.2.0`, `0.2`, `0`, `latest`), multi-arch for 
 docker run --rm -it \
   -v "$PWD:/work" \
   -v "$HOME/.aws:/home/kest/.aws" \
-  ghcr.io/dmallubhotla/kestrel kest doctor
+  ghcr.io/deepak-science/kestrel kest doctor
 ```
 
 See [docs/docker.md](docs/docker.md) for full running instructions — which config paths to mount where, AWS SSO from a container, and using `kestci` as a CI job image.

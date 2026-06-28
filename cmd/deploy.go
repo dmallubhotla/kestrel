@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/dmallubhotla/kestrel/internal/deploy"
-	"github.com/dmallubhotla/kestrel/internal/guard"
-	"github.com/dmallubhotla/kestrel/internal/runner"
+	"github.com/deepak-science/kestrel/internal/deploy"
+	"github.com/deepak-science/kestrel/internal/guard"
+	"github.com/deepak-science/kestrel/internal/runner"
 	"github.com/spf13/cobra"
 )
 

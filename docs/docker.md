@@ -1,6 +1,6 @@
 # Running kest from the container image
 
-Every release publishes `ghcr.io/dmallubhotla/kestrel` (linux amd64/arm64), tagged `X.Y.Z`, `X.Y`, `X`, and `latest`. It bundles `kest` and `kestci` plus every tool they shell out to, so nothing needs to be installed in the container:
+Every release publishes `ghcr.io/deepak-science/kestrel` (linux amd64/arm64), tagged `X.Y.Z`, `X.Y`, `X`, and `latest`. It bundles `kest` and `kestci` plus every tool they shell out to, so nothing needs to be installed in the container:
 
 | Tool | Used for |
 | --- | --- |
@@ -21,7 +21,7 @@ The container runs as `kest` (uid 1000) with home `/home/kest` and working direc
 ## Quick start
 
 ```sh
-docker run --rm ghcr.io/dmallubhotla/kestrel:latest kest --version
+docker run --rm ghcr.io/deepak-science/kestrel:latest kest --version
 ```
 
 For real work, run it from your project repo with your config mounted in:
@@ -32,7 +32,7 @@ docker run --rm -it \
   -v "$HOME/.config/kest:/home/kest/.config/kest" \
   -v "$HOME/.aws:/home/kest/.aws" \
   -v "$HOME/.kube:/home/kest/.kube" \
-  ghcr.io/dmallubhotla/kestrel kest doctor
+  ghcr.io/deepak-science/kestrel kest doctor
 ```
 
 kest reads everything from a handful of well-known paths — each mount above maps one from your machine:
@@ -54,7 +54,7 @@ alias dkest='docker run --rm -it \
   -v "$HOME/.aws:/home/kest/.aws" \
   -v "$HOME/.kube:/home/kest/.kube" \
   -v "$HOME/.local/state/kest:/home/kest/.local/state/kest" \
-  ghcr.io/dmallubhotla/kestrel kest'
+  ghcr.io/deepak-science/kestrel kest'
 
 dkest doctor
 dkest swoop
@@ -88,7 +88,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/dmallubhotla/kestrel:0
+      image: ghcr.io/deepak-science/kestrel:0
       # The runner mounts the workspace owned by its own user; non-root
       # container users can't write it (actions/checkout#956).
       options: --user root

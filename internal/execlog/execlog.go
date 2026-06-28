@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dmallubhotla/kestrel/internal/profile"
+	"github.com/deepak-science/kestrel/internal/profile"
 )
 
 // Entry represents a single command execution in the log.

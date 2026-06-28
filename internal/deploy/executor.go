@@ -1,6 +1,6 @@
 package deploy
 
-import "github.com/dmallubhotla/kestrel/internal/config"
+import "github.com/deepak-science/kestrel/internal/config"
 
 // helmArgs builds the helm args for a deploy: `upgrade --install` for apply
 // (with --atomic --cleanup-on-fail --timeout), or --dry-run for diff.

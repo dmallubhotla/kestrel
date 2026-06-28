@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/dmallubhotla/kestrel/internal/awslogin"
-	"github.com/dmallubhotla/kestrel/internal/config"
-	"github.com/dmallubhotla/kestrel/internal/execlog"
-	"github.com/dmallubhotla/kestrel/internal/guard"
-	"github.com/dmallubhotla/kestrel/internal/logging"
-	"github.com/dmallubhotla/kestrel/internal/profile"
+	"github.com/deepak-science/kestrel/internal/awslogin"
+	"github.com/deepak-science/kestrel/internal/config"
+	"github.com/deepak-science/kestrel/internal/execlog"
+	"github.com/deepak-science/kestrel/internal/guard"
+	"github.com/deepak-science/kestrel/internal/logging"
+	"github.com/deepak-science/kestrel/internal/profile"
 	"github.com/spf13/cobra"
 )
 
